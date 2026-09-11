@@ -17,6 +17,7 @@ export default function FlashEvento({ tipo, clave, duracionMs = 550 }) {
   return (
     <div
       key={clave}
+      style={{ animationDuration: `${duracionMs}ms` }}
       className={`pointer-events-none fixed inset-0 z-40 animate-flash-velo ${VELO[tipo] || VELO.alerta}`}
     />
   );

@@ -28,15 +28,12 @@ export default function AdminPanel() {
   const [error, setError] = useState(null);
 
   const cargar = useCallback(async () => {
-    try {
-      const [data, listaAdmins] = await Promise.all([api.misSalas(), consultas.listarAdmins()]);
-      setSalas(data || []);
-      setAdmins(listaAdmins || []);
-    } catch (err) {
-      setError(err.message);
-      setSalas([]);
-      setAdmins([]);
-    }
+    // Cargas independientes: si falla una, la otra igual se muestra.
+    const [resSalas, resAdmins] = await Promise.allSettled([api.misSalas(), consultas.listarAdmins()]);
+    if (resSalas.status === 'fulfilled') setSalas(resSalas.value || []);
+    if (resAdmins.status === 'fulfilled') setAdmins(resAdmins.value || []);
+    const fallo = [resSalas, resAdmins].find((r) => r.status === 'rejected');
+    setError(fallo ? fallo.reason?.message || 'No pudimos cargar el panel.' : null);
   }, []);
 
   useEffect(() => {

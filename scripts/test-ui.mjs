@@ -59,6 +59,8 @@ await ctxHost.addInitScript(
 );
 const pagHost = await ctxHost.newPage();
 pagHost.on('pageerror', (e) => erroresJS.push(`HOST: ${e.message}`));
+// Los controles peligrosos (Lobby) piden confirmación: aceptarla en el test.
+pagHost.on('dialog', (dialog) => dialog.accept());
 
 // Contexto del JUGADOR
 const ctxJugador = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -123,11 +125,24 @@ const juegos = [
 ];
 
 for (const juego of juegos) {
-  // Reiniciar al lobby antes de cada juego.
+  // Reiniciar al lobby antes de cada juego. Reintenta: el botón queda
+  // deshabilitado mientras la RPC anterior sigue en vuelo (timing real).
   const lobby = pagHost.getByRole('button', { name: 'Lobby', exact: true });
-  if ((await lobby.count()) && (await lobby.isEnabled())) {
-    await lobby.click();
-    await pagHost.getByText('Elegí el juego').first().waitFor({ timeout: 15000 }).catch(() => {});
+  let enLobby = false;
+  for (let intento = 0; intento < 12 && !enLobby; intento++) {
+    if ((await lobby.count()) && (await lobby.isEnabled())) {
+      await lobby.click();
+    }
+    enLobby = await pagHost
+      .getByText('Elegí el juego')
+      .first()
+      .waitFor({ timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!enLobby) await esperar(1000);
+  }
+  if (!enLobby) {
+    console.log('    [debug lobby]', (await pagHost.locator('body').innerText()).slice(0, 200).replace(/\n/g, ' | '));
   }
 
   await pagHost.getByText(juego.tarjeta).first().click();

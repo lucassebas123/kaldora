@@ -61,6 +61,20 @@ function rpc(nombre, parametros) {
   return envolver(supabase.rpc(nombre, parametros));
 }
 
+// PostgREST corta los SELECT en ~1000 filas: pagina hasta traer todo
+// (necesario para bancos de preguntas grandes). El orden debe ser estable.
+async function traerTodo(construirConsulta) {
+  const PAGINA = 1000;
+  const filas = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await construirConsulta().range(desde, desde + PAGINA - 1);
+    if (error) throw new Error(error.message);
+    filas.push(...(data || []));
+    if (!data || data.length < PAGINA) break;
+  }
+  return filas;
+}
+
 // Token del jugador de la sesión activa (o null fuera del juego).
 function tokenJugador() {
   return leerSesionJugador()?.token || null;
@@ -283,32 +297,19 @@ export const consultas = {
     return data || [];
   },
 
-  // ---- Bancos completos ----
-  listarBancoRosco: async () => {
-    const { data, error } = await supabase
-      .from('preguntas')
-      .select('id, letra, pregunta, respuesta')
-      .order('letra')
-      .order('pregunta');
-    if (error) throw new Error(error.message);
-    return data || [];
-  },
-  listarBancoTrivia: async () => {
-    const { data, error } = await supabase
-      .from('preguntas_trivia')
-      .select('id, pregunta, opciones, indice_correcto')
-      .order('creado_en');
-    if (error) throw new Error(error.message);
-    return data || [];
-  },
-  listarBancoSupervivencia: async () => {
-    const { data, error } = await supabase
-      .from('preguntas_supervivencia')
-      .select('id, pregunta, es_verdadera')
-      .order('creado_en');
-    if (error) throw new Error(error.message);
-    return data || [];
-  },
+  // ---- Bancos completos (paginados: no se cortan en 1000) ----
+  listarBancoRosco: () =>
+    traerTodo(() =>
+      supabase.from('preguntas').select('id, letra, pregunta, respuesta').order('letra').order('pregunta').order('id')
+    ),
+  listarBancoTrivia: () =>
+    traerTodo(() =>
+      supabase.from('preguntas_trivia').select('id, pregunta, opciones, indice_correcto').order('creado_en').order('id')
+    ),
+  listarBancoSupervivencia: () =>
+    traerTodo(() =>
+      supabase.from('preguntas_supervivencia').select('id, pregunta, es_verdadera').order('creado_en').order('id')
+    ),
   listarAdmins: async () => {
     const { data, error } = await supabase
       .from('admins_autorizados')

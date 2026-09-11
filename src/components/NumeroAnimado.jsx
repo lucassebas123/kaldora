@@ -8,15 +8,17 @@ import React, { useEffect, useRef, useState } from 'react';
 
 export default function NumeroAnimado({ valor = 0, className = '', duracionMs = 550 }) {
   const [mostrado, setMostrado] = useState(valor);
-  const valorRef = useRef(valor);
+  // Último valor DIBUJADO (no el último objetivo): si `valor` cambia a mitad
+  // de animación, el odómetro re-arranca desde donde está, sin saltar atrás.
+  const mostradoRef = useRef(valor);
   const rafRef = useRef(0);
 
   useEffect(() => {
-    const desde = valorRef.current;
+    const desde = mostradoRef.current;
     const hasta = valor;
     if (desde === hasta) return undefined;
     if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      valorRef.current = hasta;
+      mostradoRef.current = hasta;
       setMostrado(hasta);
       return undefined;
     }
@@ -26,11 +28,13 @@ export default function NumeroAnimado({ valor = 0, className = '', duracionMs = 
     const paso = (t) => {
       const k = Math.min(1, (t - t0) / duracionMs);
       const suave = 1 - Math.pow(1 - k, 3);
-      setMostrado(Math.round(desde + (hasta - desde) * suave));
+      const actual = Math.round(desde + (hasta - desde) * suave);
+      mostradoRef.current = actual;
+      setMostrado(actual);
       if (k < 1) {
         rafRef.current = requestAnimationFrame(paso);
       } else {
-        valorRef.current = hasta;
+        mostradoRef.current = hasta;
       }
     };
     rafRef.current = requestAnimationFrame(paso);

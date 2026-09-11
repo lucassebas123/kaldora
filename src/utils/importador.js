@@ -215,34 +215,71 @@ function parsearJson(texto) {
 }
 
 function parsearSql(texto) {
-  // INSERT INTO tabla (col1, col2, ...) VALUES (...), (...);
+  // Scanner de tuplas de VALUES: soporta multi-fila, comas y paréntesis
+  // DENTRO de comillas, paréntesis anidados y corte en el `;` final.
   const items = [];
-  const re = /VALUES\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)/gi;
-  let m;
-  while ((m = re.exec(texto)) !== null) {
-    const cuerpo = m[1];
-    const partes = [];
-    let actual = '';
-    let enComillas = false;
-    for (let i = 0; i < cuerpo.length; i++) {
-      const ch = cuerpo[i];
+  const idx = texto.search(/\bVALUES\b/i);
+  if (idx === -1) return items;
+
+  let enComillas = false;
+  let profundidad = 0;
+  let campo = '';
+  let fila = [];
+
+  for (let i = idx + 6; i < texto.length; i++) {
+    const ch = texto[i];
+    if (enComillas) {
       if (ch === "'") {
-        if (enComillas && cuerpo[i + 1] === "'") {
-          actual += "'";
+        if (texto[i + 1] === "'") {
+          campo += "'";
           i++;
         } else {
-          enComillas = !enComillas;
+          enComillas = false;
         }
-      } else if (ch === ',' && !enComillas) {
-        partes.push(actual);
-        actual = '';
       } else {
-        actual += ch;
+        campo += ch;
       }
+      continue;
     }
-    partes.push(actual);
-    const limpio = partes.map((p) => p.trim().replace(/^'|'$/g, '').replace(/''/g, "'"));
-    items.push(limpio);
+
+    switch (ch) {
+      case "'":
+        enComillas = true;
+        break;
+      case '(':
+        profundidad++;
+        if (profundidad === 1) {
+          campo = '';
+          fila = [];
+        } else {
+          campo += ch;
+        }
+        break;
+      case ')':
+        profundidad--;
+        if (profundidad === 0) {
+          fila.push(campo.trim());
+          campo = '';
+          if (fila.some((c) => c !== '')) items.push(fila);
+          fila = [];
+        } else {
+          campo += ch;
+        }
+        break;
+      case ',':
+        if (profundidad === 1) {
+          fila.push(campo.trim());
+          campo = '';
+        } else if (profundidad > 1) {
+          campo += ch;
+        }
+        break;
+      case ';':
+        if (profundidad === 0) return items;
+        break;
+      default:
+        if (profundidad >= 1) campo += ch;
+    }
   }
   return items; // filas de campos; el orden depende del INSERT original
 }
@@ -341,7 +378,8 @@ export function importarBanco(texto, banco) {
       itemsJson.forEach((item, idx) => {
         if (banco === 'rosco') {
           const armado = armarItem('rosco', [item.letra, item.pregunta, item.respuesta]);
-          armado ? items.push(armado) : descartes.push({ n: idx + 1, linea: JSON.stringify(item).slice(0, 60), razon: 'falta letra/pregunta/respuesta' });
+          if (armado) items.push(armado);
+          else descartes.push({ n: idx + 1, linea: JSON.stringify(item).slice(0, 60), razon: 'falta letra/pregunta/respuesta' });
         } else if (banco === 'trivia') {
           const opciones = Array.isArray(item.opciones) ? item.opciones.map(String) : null;
           const indice = Number(item.indice_correcto);
@@ -384,12 +422,12 @@ export function importarBanco(texto, banco) {
     if (mCabecera) {
       columnas = mCabecera[1].split(',').map((c) => c.trim().toLowerCase().replace(/["'`]/g, ''));
     }
-    filas = filasSql.map((campos) => {
+    const filas = filasSql.map((campos) => {
       if (!columnas) return campos;
       const porNombre = {};
       columnas.forEach((col, i) => {
         if (/letra/.test(col)) porNombre.letra = campos[i];
-        else if (/opc|alternativa/.test(col)) (porNombre.opciones ||= []).push(String(campos[i]).replace(/[\[\]"']/g, ''));
+        else if (/opc|alternativa/.test(col)) (porNombre.opciones ||= []).push(String(campos[i]).replace(/["'[\]]/g, ''));
         else if (/indice/.test(col)) porNombre.indice = campos[i];
         else if (/correcta/.test(col) && !/indice/.test(col)) porNombre.correcta = campos[i];
         else if (/respuesta/.test(col)) porNombre.respuesta = campos[i];
@@ -402,8 +440,15 @@ export function importarBanco(texto, banco) {
         else if (porNombre.correcta !== undefined) camposOut.push(porNombre.correcta);
         return camposOut;
       }
-      return [porNombre.letra || porNombre.pregunta, porNombre.respuesta ?? porNombre.verdadero, porNombre.pregunta && porNombre.letra ? porNombre.respuesta : null]
-        .filter((v) => v !== null && v !== undefined);
+      // Sin columnas de opciones reconocidas: mapear por banco.
+      // Rosco = (letra, pregunta, respuesta) · Supervivencia = (pregunta, V/F).
+      if (banco === 'rosco') {
+        return [porNombre.letra ?? '', porNombre.pregunta ?? '', porNombre.respuesta ?? ''];
+      }
+      if (banco === 'supervivencia') {
+        return [porNombre.pregunta ?? '', porNombre.verdadero ?? porNombre.respuesta ?? ''];
+      }
+      return [porNombre.pregunta ?? '', porNombre.correcta ?? porNombre.respuesta ?? ''];
     });
 
     for (let idx = 0; idx < filas.length; idx++) {

@@ -52,6 +52,10 @@ export default function Landing() {
   const pinRef = useRef(null);
   const nickRef = useRef(null);
   const identRef = useRef(null);
+  const copiadoTimerRef = useRef(null);
+
+  // Limpia el timer del "¡Copiado!" si el componente se desmonta.
+  useEffect(() => () => clearTimeout(copiadoTimerRef.current), []);
 
   useEffect(() => {
     if (pinDesdeUrl) setPin(pinDesdeUrl);
@@ -80,10 +84,14 @@ export default function Landing() {
       setPerfilReconocido(null);
       return undefined;
     }
+    // `vigente` cancela tanto el debounce como una respuesta en vuelo: si el
+    // correo cambió, la respuesta vieja no pisa los datos actuales.
+    let vigente = true;
     const pid = setTimeout(() => {
       api
         .perfilPorCorreo(correo)
         .then((perfil) => {
+          if (!vigente) return;
           if (perfil?.existe) {
             setPerfilReconocido(perfil);
             setForm((f) => ({
@@ -98,7 +106,10 @@ export default function Landing() {
         })
         .catch(() => {});
     }, 450);
-    return () => clearTimeout(pid);
+    return () => {
+      vigente = false;
+      clearTimeout(pid);
+    };
   }, [form.correo, modoLogin]);
 
   function alternarModo() {
@@ -144,6 +155,7 @@ export default function Landing() {
 
   async function entrar(e) {
     e?.preventDefault?.();
+    if (entrando) return; // anti doble submit (el disabled depende del flush)
     const problema = modoLogin ? validarLogin() : validarRegistro();
     setError(problema);
     if (problema) return;
@@ -211,7 +223,8 @@ export default function Landing() {
       document.body.removeChild(area);
     }
     setCopiado(true);
-    setTimeout(() => setCopiado(false), 2000);
+    clearTimeout(copiadoTimerRef.current);
+    copiadoTimerRef.current = setTimeout(() => setCopiado(false), 2000);
   }
 
   function continuarASala() {

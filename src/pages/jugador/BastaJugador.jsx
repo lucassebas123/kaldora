@@ -66,7 +66,9 @@ export default function BastaJugador({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(categoriasIds)]);
 
-  // Nueva ronda: reset local.
+  // Nueva ronda: reset local. La identidad de ronda es letra + inicio: NO
+  // incluir la fase (al pasar a "cuenta_atras" el efecto volvía a correr y
+  // borraba palabras/urgencia/BASTA en plena ronda).
   useEffect(() => {
     setPalabras({});
     setGuardadas({});
@@ -74,7 +76,7 @@ export default function BastaJugador({
     setSoyElPrimero(false);
     setUrgencia(null);
     declaradoRef.current = false;
-  }, [letra, fase === 'escribiendo' && juego.inicio]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [letra, juego.inicio]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resultados cuando la ronda cierra.
   useEffect(() => {

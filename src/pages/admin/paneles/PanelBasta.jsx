@@ -18,7 +18,7 @@ import { api, consultas } from '../../../api/kaldoraApi';
 import { BASTA } from '../../../game/constantes';
 
 export default function PanelBasta({
-  sala, jugadores, online, offsetReloj, escuchar, enviar, ejecutar, trabajando,
+  sala, jugadores, online, offsetReloj, escuchar, ejecutar, trabajando,
 }) {
   const juego = sala.juego || {};
   const fase = juego.fase || 'escribiendo';

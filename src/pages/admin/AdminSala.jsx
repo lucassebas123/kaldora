@@ -39,17 +39,21 @@ export default function AdminSala() {
 
   const [trabajando, setTrabajando] = useState(false);
   const [mostrarBanco, setMostrarBanco] = useState(false);
+  const [aviso, setAviso] = useState(null);
 
   async function ejecutar(fn) {
     if (trabajando) return;
     setTrabajando(true);
+    setAviso(null);
     try {
       await fn();
       // Re-publica la instantánea por broadcast: los celulares reaccionan al
       // instante sin depender de la entrega de postgres_changes.
       await publicarEstado();
     } catch (err) {
+      // Antes solo quedaba en consola: el host creía que la acción funcionó.
       console.warn('[anfitrión]', err.message);
+      setAviso(err.message || 'La acción no se pudo completar. Probá otra vez.');
     } finally {
       setTrabajando(false);
     }
@@ -193,7 +197,15 @@ export default function AdminSala() {
               />
             )}
             <BotonControl
-              onClick={() => ejecutar(() => api.volverAlLobby(sala.id))}
+              onClick={() => {
+                if (
+                  sala.estado !== 'en_espera' &&
+                  !window.confirm('¿Volver al lobby? Se reinician los puntos y las respuestas de la partida.')
+                ) {
+                  return;
+                }
+                ejecutar(() => api.volverAlLobby(sala.id));
+              }}
               disabled={trabajando || sala.estado === 'en_espera'}
               icono={<Undo2 size={14} />}
               texto="Lobby"
@@ -217,6 +229,19 @@ export default function AdminSala() {
             </button>
           </div>
         </header>
+
+        {/* Aviso visible de RPC fallida (antes solo iba a consola). */}
+        {aviso && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-red-400/40 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-200">
+            <span>{aviso}</span>
+            <button
+              onClick={() => setAviso(null)}
+              className="rounded-full px-2 text-red-200/80 hover:text-white transition"
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
 
         <TransicionVista claveVista={vista} className="flex-1 flex flex-col">
           {sala.estado === 'en_espera' && <LobbyAnfitrion {...props} />}
@@ -275,10 +300,31 @@ function LobbyAnfitrion({ sala, jugadores, online, ejecutar, trabajando }) {
   }
 
   function copiarEnlace() {
-    navigator.clipboard?.writeText(urlUnirse).then(() => {
+    const marcar = () => {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 1600);
-    });
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(urlUnirse).then(marcar).catch(marcarFallback);
+    } else {
+      marcarFallback();
+    }
+    // Fallback clásico si el navegador no da permiso de clipboard.
+    function marcarFallback() {
+      const area = document.createElement('textarea');
+      area.value = urlUnirse;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      try {
+        document.execCommand('copy');
+        marcar();
+      } catch {
+        /* sin clipboard disponible */
+      }
+      document.body.removeChild(area);
+    }
   }
 
   return (

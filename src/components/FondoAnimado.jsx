@@ -108,7 +108,7 @@ export default function FondoAnimado({ densidad = 70, titilar = true, matiz = 27
     };
   }, [densidad, titilar, matiz]);
 
-  const orbe = (tono, extra = '') => ({
+  const orbe = (tono) => ({
     background: `radial-gradient(circle, hsla(${tono}, 85%, 62%, 0.26) 0%, transparent 70%)`,
   });
 

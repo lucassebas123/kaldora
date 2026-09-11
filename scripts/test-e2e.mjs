@@ -94,7 +94,12 @@ verificar('jugador 1 se une (con registro) y recibe token', !unido1.error && uni
 const unido2 = await j2.rpc('unirse_sala', { p_codigo: sala.codigo, p_nickname: 'E2E_Dos', p_icono: 'Flame', p_color: 'bg-blue-500', ...DATOS2 });
 verificar('jugador 2 se une (con registro) y recibe token', !unido2.error && unido2.data?.token?.length === 32);
 
-const nickDuplicado = await j1.rpc('unirse_sala', { p_codigo: sala.codigo, p_nickname: 'e2e_uno', ...DATOS1 });
+// Cuenta DISTINTA con el nickname de J1 (insensible a mayúsculas) → rechazo.
+const nickDuplicado = await j1.rpc('unirse_sala', {
+  p_codigo: sala.codigo, p_nickname: 'e2e_uno',
+  p_nombre: 'Otra', p_apellido: 'Persona', p_telefono: '1166660001',
+  p_correo: `nickdup.${Date.now()}@example.com`, p_icono: 'Star', p_color: 'bg-green-500',
+});
 verificar('nickname duplicado rechazado (insensible a mayúsculas)', !!nickDuplicado.error);
 
 const correoMalo = await j1.rpc('unirse_sala', { p_codigo: sala.codigo, p_nickname: 'E2E_Tres', p_nombre: 'X', p_apellido: 'Y', p_telefono: '1155550003', p_correo: 'no-es-correo', p_icono: 'Star', p_color: 'bg-green-500' });
@@ -157,8 +162,8 @@ const mcReabierta = await j1.rpc('entrar_con_identificador', {
   p_codigo: salaMC.codigo, p_identificador: regMC.data.pinJugador, p_icono: 'Star', p_color: 'bg-purple-500',
 });
 const { data: jugsMC } = await anon.from('jugadores').select('id, nickname').eq('id_sala', salaMC.id);
-verificar('login reutiliza al jugador sin multiplicar filas en la sala',
-  !mcReabierta.error && jugsMC.length === 2);
+verificar('re-registro y login reutilizan UNA fila de la cuenta (sin fantasmas)',
+  !mcReabierta.error && jugsMC.length === 1 && jugsMC[0].nickname === 'MC_Otra');
 
 const anonPIIMC = await anon.from('registros_jugadores').select('pin_jugador').limit(1);
 verificar('SEGURIDAD: anon NO puede leer PINs de jugadores', !!anonPIIMC.error || (anonPIIMC.data || []).length === 0);
@@ -203,7 +208,6 @@ let letraJ1 = 'A';
 for (let i = 0; i < 40; i++) {
   const est = await j1.rpc('rosco_estado', { p_token: unido1.data.token });
   if (est.data?.rosco?.t) break;
-  const letraActiva = est.data?.rosco?.l;
   const { data: preg } = await host
     .from('preguntas').select('respuesta').eq('id', est.data?.rosco?.q).single();
   const r = await j1.rpc('rosco_enviar', { p_token: unido1.data.token, p_respuesta: preg.respuesta });
@@ -223,13 +227,11 @@ const pasoJ2 = await j2.rpc('rosco_pasar', { p_token: unido2.data.token });
 verificar('pasapalabra en A: sin puntos y avanza a B', !pasoJ2.error && pasoJ2.data?.letra === 'B');
 void letraJ1; void respuestaDeLetra;
 
-let letraJ2 = 'B';
 let volvioPorA = false;
 for (let i = 0; i < 30; i++) {
   const r = await j2.rpc('rosco_enviar', { p_token: unido2.data.token, p_respuesta: 'zzzz-nada' });
   if (r.error) { console.log('   error inesperado J2:', r.error.message); break; }
   if (r.data.letra === 'A') volvioPorA = true; // regresó por la pasapalabra
-  letraJ2 = r.data.letra;
   if (r.data.terminado) break;
 }
 verificar('ciclo circular: después de la Z vuelve por la pendiente A', volvioPorA === true);
@@ -294,7 +296,6 @@ const { data: salaBasta2 } = await anon.from('salas').select('juego').eq('id', s
 verificar('fase → cuenta_atras con deadline', salaBasta2.juego.fase === 'cuenta_atras' && Boolean(salaBasta2.juego.deadline));
 
 // Categorías con léxico (validación estricta) vs abiertas (solo diccionario).
-const CON_LEXICO = ['Nombre de persona', 'Animal', 'País o ciudad', 'Color', 'Comida o plato', 'Fruta o verdura', 'Deporte', 'Profesión u oficio'];
 const { data: catsInfo } = await anon.from('categorias_basta').select('id, nombre, clave_lexico');
 const nombreDe = (id) => catsInfo?.find((c) => c.id === id)?.nombre || '';
 const tieneLexico = (id) => Boolean(catsInfo?.find((c) => c.id === id)?.clave_lexico);
@@ -337,6 +338,32 @@ await esperar(300);
 const { data: resJ2b } = await j2.from('respuestas_basta').select('id, id_categoria, valida, puntos').eq('id_jugador', unido2.data.idJugador);
 const inventadaB = resJ2b.find((r) => r.id === inventada.id);
 verificar('host tacha la inventada y recalcula → 0 pts', !tachada.error && !recalc.error && inventadaB?.valida === false && inventadaB?.puntos === 0);
+
+// ── 5b. SEGUNDA RONDA: regresión de doble conteo ─────────────────────────────
+// Antes, iniciar una ronda nueva NO borraba `respuestas_basta` y el cierre
+// sumaba las filas de la ronda anterior dos veces (puntos inflados).
+const { data: jugsR1 } = await anon.from('jugadores').select('id, puntos').eq('id_sala', sala.id);
+const puntosJ1R1 = jugsR1.find((j) => j.id === unido1.data.idJugador)?.puntos;
+const puntosJ2R1 = jugsR1.find((j) => j.id === unido2.data.idJugador)?.puntos;
+verificar('fin ronda 1: J1=45 y J2=35', puntosJ1R1 === 45 && puntosJ2R1 === 35);
+
+const ronda2 = await host.rpc('basta_iniciar_ronda', { p_sala: sala.id });
+verificar('ronda 2 inicia OK', !ronda2.error);
+const { data: salaBasta3 } = await anon.from('salas').select('juego').eq('id', sala.id).single();
+const cats2 = salaBasta3.juego.categorias;
+const { count: filasR2 } = await host
+  .from('respuestas_basta').select('id', { count: 'exact', head: true }).eq('id_sala', sala.id);
+verificar('al iniciar la ronda 2 se limpian las respuestas de la ronda 1', filasR2 === 0);
+
+// J1 juega la ronda 2 (5 únicas = +50); J2 no juega: no debe recuperar puntos.
+for (const c of cats2) await j1.rpc('basta_enviar', { p_token: unido1.data.token, p_id_categoria: c, p_texto: `R2${ronda2.data.letra}` });
+await host.rpc('basta_cerrar_ronda', { p_sala: sala.id });
+await esperar(300);
+const { data: jugsR2 } = await anon.from('jugadores').select('id, puntos').eq('id_sala', sala.id);
+const puntosJ1R2 = jugsR2.find((j) => j.id === unido1.data.idJugador)?.puntos;
+const puntosJ2R2 = jugsR2.find((j) => j.id === unido2.data.idJugador)?.puntos;
+verificar('ronda 2 NO re-suma la ronda 1: J1 = 45+50 = 95', puntosJ1R2 === 95);
+verificar('quien no juega la ronda 2 conserva sus puntos (J2 = 35)', puntosJ2R2 === 35);
 
 await host.rpc('volver_al_lobby', { p_sala: sala.id });
 

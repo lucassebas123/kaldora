@@ -6,8 +6,8 @@
 //     si ya terminaron su rosco. Se alimenta de `jugadores.rosco` en vivo.
 //   * El anfitrión controla Pausar/Reanudar/Terminar (barra superior).
 
-import React, { useEffect, useState } from 'react';
-import { Loader2, Check, X, SkipForward, PartyPopper } from 'lucide-react';
+import React from 'react';
+import { Check, X, SkipForward, PartyPopper } from 'lucide-react';
 import AnilloProgreso from '../../../components/AnilloProgreso';
 import AvatarChip from '../../../components/AvatarChip';
 import RankingJugadores from '../../../components/RankingJugadores';
@@ -16,7 +16,7 @@ import { useCuentaAtras, formatearMs } from '../../../hooks/useCuentaAtras';
 import { useEventoSala } from '../../../hooks/useSalaRealtime';
 import { ROSCO } from '../../../game/constantes';
 
-export default function PanelRosco({ sala, jugadores, online, offsetReloj, escuchar, ejecutar, trabajando }) {
+export default function PanelRosco({ sala, jugadores, online, offsetReloj, escuchar }) {
   const juego = sala.juego || {};
   const congelada = sala.estado === 'pausado';
   const { burbujas, push } = useFeedBurbujas();
@@ -120,7 +120,7 @@ export default function PanelRosco({ sala, jugadores, online, offsetReloj, escuc
                 </span>
                 {terminado && (
                   <span className="ml-auto text-[10px] uppercase tracking-wider text-amber-300 font-black">
-                    {tiempoAgotadoLabel(juego, msRestantes)}
+                    {tiempoAgotadoLabel(msRestantes)}
                   </span>
                 )}
               </div>
@@ -139,6 +139,6 @@ export default function PanelRosco({ sala, jugadores, online, offsetReloj, escuc
   );
 }
 
-function tiempoAgotadoLabel(juego, msRestantes) {
+function tiempoAgotadoLabel(msRestantes) {
   return msRestantes <= 0 ? 'TIEMPO AGOTADO' : 'COMPLETO';
 }

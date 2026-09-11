@@ -4,7 +4,7 @@
 // ronda, contador de respuestas en vivo (broadcast), vivos vs eliminados y
 // avance de ronda. Cuando queda un solo vivo, sugiere terminar.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, SkipForward, Skull, HeartPulse } from 'lucide-react';
 import RankingJugadores from '../../../components/RankingJugadores';
 import FeedBurbujas, { useFeedBurbujas } from '../../../components/FeedBurbujas';
@@ -24,6 +24,8 @@ export default function PanelSupervivencia({
 
   const [pregunta, setPregunta] = useState(null);
   const [respondieron, setRespondieron] = useState(0);
+  // Evita re-procesar la misma pregunta con cada cambio de offsetReloj.
+  const procesadoRef = useRef(null);
 
   const vivos = jugadores.filter((j) => !j.eliminado);
   const eliminados = jugadores.filter((j) => j.eliminado);
@@ -59,17 +61,23 @@ export default function PanelSupervivencia({
     push({ texto: nicknamePorId[idJugador] || 'Jugador', nota: 'V/F' });
   });
 
-  // Fin de ventana: procesar eliminados contra el DEADLINE real.
+  // Fin de ventana: procesar eliminados contra el DEADLINE real (una sola vez
+  // por pregunta; el servidor igual es idempotente).
   useEffect(() => {
     if (congelada || !idPregunta || !juego.inicio) return undefined;
+    const disparar = () => {
+      if (procesadoRef.current === idPregunta) return;
+      procesadoRef.current = idPregunta;
+      ejecutar(() => api.supervivenciaProcesar(sala.id, idPregunta));
+    };
     const finMs =
       new Date(juego.inicio).getTime() + (juego.duracion_ms || SUPERVIVENCIA.DURACION_MS) + 400 - offsetReloj;
     const ms = finMs - Date.now();
     if (ms <= 0) {
-      ejecutar(() => api.supervivenciaProcesar(sala.id, idPregunta));
+      disparar();
       return undefined;
     }
-    const pid = setTimeout(() => ejecutar(() => api.supervivenciaProcesar(sala.id, idPregunta)), ms);
+    const pid = setTimeout(disparar, ms);
     return () => clearTimeout(pid);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idPregunta, juego.inicio, juego.duracion_ms, congelada, offsetReloj]);

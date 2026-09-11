@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { leerSesionJugador } from '../api/kaldoraApi';
 /** Ordena jugadores: 1º puntos, 2º menos eliminados (vivos arriba), 3º racha. */
 function ordenarJugadores(jugadores) {
   return [...jugadores].sort((a, b) => {
@@ -66,7 +67,11 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   const tokenRef = useRef(null);
   const esAnfitrionRef = useRef(false);
   const trackeadoRef = useRef(false);
-  const ultimoEventoRef = useRef(Date.now());
+  const ultimoEventoRef = useRef(0);
+  // Último `sala` visto, para el vigilante (evita side effects en updaters).
+  const salaRef = useRef(null);
+  // Nº de la última petición de `recargar`: descarta respuestas fuera de orden.
+  const peticionRef = useRef(0);
 
   // Sincroniza los refs fuera del render (regla de refs de React).
   useEffect(() => {
@@ -75,6 +80,9 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   useEffect(() => {
     esAnfitrionRef.current = esAnfitrion;
   }, [esAnfitrion]);
+  useEffect(() => {
+    salaRef.current = sala;
+  }, [sala]);
 
   // Suelta TODOS los canales de esta sala antes de crear uno nuevo.
   // `supabase.channel(topic)` REUTILIZA el canal existente con el mismo topic
@@ -104,13 +112,21 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   // ---------------------------------------------------------------------------
   const recargar = useCallback(async () => {
     if (!idSala) return null;
+    const peticion = ++peticionRef.current;
     const [resSala, resJugadores] = await Promise.all([
       supabase.from('salas').select('*').eq('id', idSala).maybeSingle(),
       supabase.from('jugadores').select('*').eq('id_sala', idSala),
     ]);
+    // Respuesta fuera de orden (una petición vieja resolvió tarde): descartar.
+    if (peticion !== peticionRef.current) return null;
     if (resSala.error || resJugadores.error) {
       setError(resSala.error || resJugadores.error);
+      setListo(true);
+      setVerificada(true);
+      return null;
     }
+    // Éxito: limpiar un error transitorio y recién ahí pisar el estado.
+    setError(null);
     setSala(resSala.data);
     setJugadores(ordenarJugadores(resJugadores.data || []));
     setListo(true);
@@ -131,7 +147,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       return;
     }
     if (tokenRef.current) {
-      const sesion = JSON.parse(localStorage.getItem('kaldora_jugador') || 'null');
+      const sesion = leerSesionJugador();
       await canal.track({
         tipo: 'jugador',
         id: sesion?.idJugador,
@@ -155,12 +171,8 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     });
     // El propio canal no devuelve el eco del propio cliente: marcarse a sí
     // mismo como online (un jugador siempre sabe que está conectado).
-    try {
-      const sesion = JSON.parse(localStorage.getItem('kaldora_jugador') || 'null');
-      if (sesion?.idJugador) ids.add(sesion.idJugador);
-    } catch {
-      /* sin sesión: es el anfitrión, nada que sumar */
-    }
+    const sesion = leerSesionJugador();
+    if (sesion?.idJugador) ids.add(sesion.idJugador);
     setOnline(ids);
   }, []);
 
@@ -181,6 +193,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   useEffect(() => {
     if (!idSala) return;
 
+    ultimoEventoRef.current = Date.now();
     recargar();
 
     // Sin `filter` de postgres_changes: la entrega filtrada de Realtime es
@@ -223,7 +236,15 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'jugadores' }, (payload) => {
           marcarEvento();
-          const fila = payload.eventType === 'DELETE' ? payload.old : payload.new;
+          // En DELETE, `payload.old` solo trae la PK (REPLICA IDENTITY DEFAULT):
+          // hay que filtrar por id, no por id_sala, o el borrado se pierde.
+          if (payload.eventType === 'DELETE') {
+            const idBorrado = payload.old?.id;
+            if (!idBorrado) return;
+            setJugadores((prev) => ordenarJugadores(prev.filter((j) => j.id !== idBorrado)));
+            return;
+          }
+          const fila = payload.new;
           if (!fila || fila.id_sala !== idSala) return;
           setJugadores((prev) => {
             let siguiente = prev;
@@ -231,8 +252,6 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
               siguiente = prev.some((j) => j.id === fila.id) ? prev : [...prev, fila];
             } else if (payload.eventType === 'UPDATE') {
               siguiente = prev.map((j) => (j.id === fila.id ? fila : j));
-            } else if (payload.eventType === 'DELETE') {
-              siguiente = prev.filter((j) => j.id !== fila.id);
             }
             return ordenarJugadores(siguiente);
           });
@@ -270,14 +289,18 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
         })
         .on('broadcast', { event: 'hora_res' }, ({ payload }) => {
           if (payload?.de !== tokenRef.current) return;
+          if (!Number.isFinite(payload?.tReq) || !Number.isFinite(payload?.tServer)) return;
           const rtt = Date.now() - payload.tReq;
-          if (rtt > 1500) return; // muestra podrida (pestaña en background): descartar
+          if (!Number.isFinite(rtt) || rtt < 0 || rtt > 1500) return; // muestra podrida
           const offset = payload.tServer + rtt / 2 - Date.now();
           setOffsetReloj((prev) => (prev === 0 ? offset : prev * 0.3 + offset * 0.7));
         })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             setListo(true);
+            // Canal nuevo: hay que volver a publicar la presencia (el ref
+            // quedaba en true del canal anterior y `trackear` retornaba antes).
+            trackeadoRef.current = false;
             await trackear();
             sincronizarPresencia();
             pingReloj();
@@ -306,12 +329,10 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
         recargar();
         if (esAnfitrionRef.current) return; // el anfitrión reacciona al estado poll
         // Con partida activa reconstruimos el canal para no perder el juego.
-        setSala((salaActual) => {
-          if (salaActual && (salaActual.estado === 'jugando' || salaActual.estado === 'pausado')) {
-            conectar();
-          }
-          return salaActual;
-        });
+        const salaActual = salaRef.current;
+        if (salaActual && (salaActual.estado === 'jugando' || salaActual.estado === 'pausado')) {
+          conectar();
+        }
       }
     }, 5000);
 

@@ -16,7 +16,6 @@ let temaActual = null;
 let temporizador = null; // scheduler
 let paso = 0; // paso del patrón (por corchea)
 let proximoTiempo = 0; // reloj de programación (audio time)
-const BPM_DEFECTO = 84;
 
 const TEMAS = {
   portal: {

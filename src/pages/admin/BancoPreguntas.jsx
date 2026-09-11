@@ -9,11 +9,10 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Loader2, X, Save, Trash2, Upload, Plus, FileText, AlertTriangle, CheckCircle2,
+  Loader2, X, Save, Trash2, Upload, FileText, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 import { api, consultas } from '../../api/kaldoraApi';
-import { importarBanco, consolidarTrivia, leerArchivoPorChunks, MAX_TEXTO } from '../../utils/importador';
-import { LETRAS } from '../../components/Rosco';
+import { importarBanco, consolidarTrivia, leerArchivoPorChunks } from '../../utils/importador';
 
 const BANCOS = [
   { id: 'rosco', nombre: 'El Rosco', detalle: 'Letra · Pregunta · Respuesta' },
@@ -358,14 +357,15 @@ function ListadoRosco({ filas, guardandoId, guardar, eliminar }) {
 }
 
 function FilaRosco({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
-  const normalizar = () => ({ letra: fila.letra || 'A', pregunta: fila.pregunta || '', respuesta: fila.respuesta || '' });
+  // El `id` viaja dentro del estado para que guardar() haga UPDATE y no INSERT.
+  const normalizar = () => ({ id: fila.id, letra: fila.letra || 'A', pregunta: fila.pregunta || '', respuesta: fila.respuesta || '' });
   const [estado, setEstado] = useState(normalizar);
-  const claveFila = JSON.stringify(fila);
+  const claveFila = JSON.stringify([fila.id, fila.letra, fila.pregunta, fila.respuesta]);
   useEffect(() => {
     setEstado(normalizar());
   }, [claveFila]); 
 
-  const modificado = nuevo || claveFila !== JSON.stringify(estado);
+  const modificado = nuevo || claveFila !== JSON.stringify([estado.id, estado.letra, estado.pregunta, estado.respuesta]);
   return (
     <div className="grid grid-cols-[2.5rem_1fr_1fr_auto] gap-2 items-center">
       <input
@@ -427,18 +427,26 @@ function ListadoTrivia({ filas, guardandoId, guardar, eliminar }) {
 
 function FilaTrivia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
   const normalizar = () => ({
+    id: fila.id,
     pregunta: fila.pregunta || '',
     opciones: fila.opciones ? [...fila.opciones, '', '', '', ''].slice(0, 4) : ['', '', '', ''],
     indice_correcto: fila.indice_correcto ?? 0,
   });
   const [estado, setEstado] = useState(normalizar);
-  const claveFila = JSON.stringify([fila.pregunta, fila.opciones, fila.indice_correcto]);
+  const claveFila = JSON.stringify([fila.id, fila.pregunta, fila.opciones, fila.indice_correcto]);
   useEffect(() => {
     setEstado(normalizar());
   }, [claveFila]); 
 
   const consolidada = consolidarTrivia(estado);
-  const modificado = nuevo || claveFila !== JSON.stringify([estado.pregunta, estado.opciones, estado.indice_correcto]);
+  // Compara lo consolidado contra la fila original (sin el padding a 4).
+  const original = JSON.stringify([
+    (fila.pregunta || '').trim(),
+    (fila.opciones || []).map((o) => String(o).trim()),
+    fila.indice_correcto ?? 0,
+  ]);
+  const actual = JSON.stringify([consolidada.pregunta, consolidada.opciones, consolidada.indice_correcto]);
+  const modificado = nuevo || original !== actual;
   // La correcta no puede quedar vacía, y hacen falta al menos 2 opciones.
   const puedoGuardar = modificado && estado.pregunta.trim() && !consolidada.correctaPerdida && consolidada.opciones.length >= 2;
 
@@ -453,7 +461,7 @@ function FilaTrivia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
         />
         <span className="flex items-center gap-1">
           <button
-            onClick={() => onGuardar(consolidada)}
+            onClick={() => onGuardar({ ...consolidada, id: fila.id })}
             disabled={!puedoGuardar || guardando}
             title={
               consolidada.correctaPerdida
@@ -523,14 +531,14 @@ function ListadoSupervivencia({ filas, guardandoId, guardar, eliminar }) {
 }
 
 function FilaSupervivencia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
-  const normalizar = () => ({ pregunta: fila.pregunta || '', es_verdadera: fila.es_verdadera ?? true });
+  const normalizar = () => ({ id: fila.id, pregunta: fila.pregunta || '', es_verdadera: fila.es_verdadera ?? true });
   const [estado, setEstado] = useState(normalizar);
-  const claveFila = JSON.stringify([fila.pregunta, fila.es_verdadera]);
+  const claveFila = JSON.stringify([fila.id, fila.pregunta, fila.es_verdadera]);
   useEffect(() => {
     setEstado(normalizar());
   }, [claveFila]);
 
-  const modificado = nuevo || claveFila !== JSON.stringify([estado.pregunta, estado.es_verdadera]);
+  const modificado = nuevo || claveFila !== JSON.stringify([estado.id, estado.pregunta, estado.es_verdadera]);
   return (
     <div className="flex gap-2 items-center">
       <input

@@ -29,7 +29,9 @@ export default function Podio({
   // corrida: el montaje del podio marca el momento, no cada snapshot.
   const gane = idJugadorPropio && jugadores[0]?.id === idJugadorPropio;
   const ganeRef = useRef(gane);
-  ganeRef.current = gane;
+  useEffect(() => {
+    ganeRef.current = gane;
+  }, [gane]);
   const [mostrados, setMostrados] = useState(0); // 0..3 escalones revelados
 
   useEffect(() => {
@@ -99,7 +101,8 @@ export default function Podio({
         <div className="w-full flex items-end justify-center gap-3">
           {ordenVisual.map((j, i) => {
             const puesto = ordenIdx[i];
-            const visible = mostrados > puesto;
+            // Revela 3º → 2º → 1º (el 1º cae junto con la ráfaga de t3).
+            const visible = mostrados >= 3 - puesto;
             return (
               <div key={i} className="flex flex-col items-center justify-end w-24">
                 {visible && j ? (

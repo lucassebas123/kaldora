@@ -181,7 +181,32 @@ console.log('\n═══ 6. SINCRONIZACIÓN REACTIVA — consolidar sin desindex
 }
 
 // =============================================================================
-console.log('\n═══ 7. LECTURA POR CHUNKS — archivos grandes sin bloquear ═══');
+console.log('\n═══ 7. IMPORTACIÓN SQL — INSERT INTO con cabecera de columnas ═══');
+// =============================================================================
+{
+  // Regresión: `filas` no declarada rompía TODA importación SQL (ReferenceError).
+  const sqlRosco = `INSERT INTO preguntas (letra, pregunta, respuesta) VALUES
+    ('A', 'Capital de Francia', 'París'),
+    ('Z', 'Zorro en inglés', 'Fox');`;
+  const r1 = importarBanco(sqlRosco, 'rosco');
+  verificar('SQL rosco: 2 items sin excepción', r1.items.length === 2);
+  verificar('SQL rosco: letra/pregunta/respuesta en su lugar (no respuesta duplicada)',
+    r1.items[0].letra === 'A' && r1.items[0].pregunta === 'Capital de Francia' && r1.items[0].respuesta === 'París');
+
+  const sqlSup = `INSERT INTO preguntas_supervivencia (pregunta, es_verdadera) VALUES
+    ('El sol es una estrella', true),
+    ('La luna es un planeta', false);`;
+  const r2 = importarBanco(sqlSup, 'supervivencia');
+  verificar('SQL supervivencia: pregunta + booleano', r2.items.length === 2 && r2.items[0].es_verdadera === true && r2.items[1].es_verdadera === false);
+
+  const sqlTrivia = `INSERT INTO preguntas_trivia (pregunta, opcion1, opcion2, correcta) VALUES
+    ('¿2+2?', 'tres', 'cuatro', 'cuatro');`;
+  const r3 = importarBanco(sqlTrivia, 'trivia');
+  verificar('SQL trivia: opciones + índice correcto', r3.items.length === 1 && r3.items[0].indice_correcto === 1);
+}
+
+// =============================================================================
+console.log('\n═══ 8. LECTURA POR CHUNKS — archivos grandes sin bloquear ═══');
 // =============================================================================
 {
   const parte = '¿Pregunta | a | b | a\n'.repeat(20000); // ~500 KB

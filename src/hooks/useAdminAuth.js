@@ -13,15 +13,19 @@ export function useAdminAuth() {
   const [email, setEmail] = useState(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSesion(data.session);
-        setEmail(data.session.user?.email || null);
-        setEstado('dentro');
-      } else {
-        setEstado('fuera');
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data.session) {
+          setSesion(data.session);
+          setEmail(data.session.user?.email || null);
+          setEstado('dentro');
+        } else {
+          setEstado('fuera');
+        }
+      })
+      // Si la hidratación falla, no dejar la ruta protegida en spinner eterno.
+      .catch(() => setEstado('fuera'));
 
     const { data: sub } = supabase.auth.onAuthStateChange((_evento, nuevaSesion) => {
       if (nuevaSesion) {

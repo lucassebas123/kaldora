@@ -34,13 +34,17 @@ export default function SalaJugador() {
   const [sesion, setSesion] = useState(null);
   const [verificando, setVerificando] = useState(true);
 
-  // Restauración de sesión por código de sala.
+  // Restauración de sesión por código de sala. Valida la FORMA (no solo el
+  // JSON): una sesión vieja/incompleta dejaría el hook sin idSala y la
+  // pantalla en spinner infinito.
   useEffect(() => {
     const s = leerSesionJugador();
-    if (s && s.codigo === codigo) {
+    const completa = s && s.codigo === codigo && s.idSala && s.token && s.idJugador && s.nickname;
+    if (completa) {
       setSesion(s);
     } else {
-      // Sin sesión para esta sala: volver al portal con el PIN precargado.
+      // Sin sesión válida para esta sala: volver al portal con el PIN.
+      borrarSesionJugador();
       navigate(`/?sala=${codigo}`, { replace: true });
       return;
     }
@@ -64,6 +68,15 @@ export default function SalaJugador() {
       navigate('/', { replace: true });
     }
   }, [verificada, sala, error, navigate]);
+
+  // Expulsado / fila borrada con la sala viva: sin esto el jugador seguiría
+  // viendo la partida (sus RPCs fallarían en silencio).
+  useEffect(() => {
+    if (verificada && sala && !jugadorPropio) {
+      borrarSesionJugador();
+      navigate('/', { replace: true });
+    }
+  }, [verificada, sala, jugadorPropio, navigate]);
 
   async function salir() {
     try {

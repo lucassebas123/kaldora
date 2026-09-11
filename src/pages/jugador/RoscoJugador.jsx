@@ -79,13 +79,19 @@ export default function RoscoJugador({ sala, sesion, jugadorPropio, offsetReloj,
 
   // Restaurar mi rosco tras recargar la página (letra, pregunta y estados).
   useEffect(() => {
-    if (!sesion?.token) return;
+    if (!sesion?.token) return undefined;
+    let vigente = true;
+    setRestaurando(true);
     api
       .roscoEstado()
       .then((estado) => {
-        if (estado?.rosco && Object.keys(estado.rosco).length > 0) setMiRosco(estado.rosco);
+        if (vigente && estado?.rosco && Object.keys(estado.rosco).length > 0) setMiRosco(estado.rosco);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => vigente && setRestaurando(false));
+    return () => {
+      vigente = false;
+    };
   }, [sesion?.token]);
 
   // Al vencer el tiempo total, cerrar el rosco propio (idempotente).
@@ -151,7 +157,7 @@ export default function RoscoJugador({ sala, sesion, jugadorPropio, offsetReloj,
   async function pasar() {
     if (!letra || enviando || terminado || msRestantes <= 0 || congelada) return;
     try {
-      const res = await api.roscoPasar();
+      await api.roscoPasar();
       api.roscoEstado().then((est) => est?.rosco && setMiRosco(est.rosco)).catch(() => {});
       sonarPasapalabra();
       vibrarPasapalabra();
