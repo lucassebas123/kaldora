@@ -75,8 +75,28 @@ await pagJugador.locator('input[placeholder^="Ej:"]').fill('PlaywrightPro');
 await pagJugador.locator('input[placeholder="Nombre"]').fill('Nora');
 await pagJugador.locator('input[placeholder="Apellido"]').fill('De Pruebas');
 await pagJugador.locator('input[placeholder="Celular"]').fill('1155550099');
-await pagJugador.locator('input[placeholder="Correo"]').fill('nora@example.com');
+await pagJugador.locator('input[placeholder="Correo"]').fill(`nora.${Date.now()}@example.com`);
+
+// Toggle: modo login oculta el registro y muestra el identificador único.
+await pagJugador.getByRole('button', { name: 'Ingresa aquí' }).click();
+const sinRegistro = (await pagJugador.locator('input[placeholder="Nombre"]').count()) === 0;
+const conIdentificador = (await pagJugador.locator('input[placeholder="Correo, celular o PIN de Jugador"]').count()) === 1;
+verificar('modo login oculta los datos personales', sinRegistro);
+verificar('modo login muestra el identificador de jugador', conIdentificador);
+await pagJugador.getByRole('button', { name: 'Regístrate aquí' }).click();
+
 await pagJugador.getByRole('button', { name: /Entrar a la sala/i }).click();
+
+// Modal con el PIN de jugador recién generado + copiar.
+const pinJugadorVisible = await pagJugador
+  .getByText(/JUG-[0-9]{6}/)
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('registro exitoso → modal con PIN de jugador', pinJugadorVisible);
+if (pinJugadorVisible) await pagJugador.getByRole('button', { name: /Copiar PIN de jugador/i }).click();
+await pagJugador.getByRole('button', { name: /Continuar a la sala/i }).click();
+
 const llegoJugador = await pagJugador.waitForURL('**/jugar/**', { timeout: 15000 }).then(() => true).catch(() => false);
 verificar('registro completo → entra a la sala (/jugar/...)', llegoJugador);
 const esperaVisible = await pagJugador.getByText('¡Estás dentro, PlaywrightPro!').waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
@@ -97,7 +117,7 @@ if (!pinEnPanel) console.log('    [debug admin]', (await pagHost.locator('body')
 console.log('\n═══ 3. Lanzar LOS 4 JUEGOS (aquí vivía la pantalla en blanco) ═══');
 const juegos = [
   { id: 'rosco', tarjeta: /El Rosco/, marcadorHost: /Rosco en curso/, marcadorJugador: /Pasar|Pasapalabra|Tu rosco|palabra/i },
-  { id: 'trivia', tarjeta: /Trivia de Velocidad/, marcadorHost: /Siguiente pregunta/, marcadorJugador: /Cargando pregunta|CORRECTO|Uhh, no era|Se derritió/ },
+  { id: 'trivia', tarjeta: /Trivia de Velocidad/, marcadorHost: /Siguiente pregunta/, marcadorJugador: /Cargando pregunta|CORRECTO|Uhh, no era|Se derritió|Ronda/ },
   { id: 'basta', tarjeta: /Basta!/, marcadorHost: /Cerrar ronda/, marcadorJugador: /¡BASTA!|Completá las 5 categorías/ },
   { id: 'supervivencia', tarjeta: /Supervivencia/, marcadorHost: /Siguiente ronda/, marcadorJugador: /VERDADERO|VIVO|ELIMINADO/ },
 ];

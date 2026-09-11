@@ -18,6 +18,7 @@ arquitectura, seguridad, herramientas y despliegue.
 | **v1 — "El Rosco"** | El primer juego: un rosco por **equipos con turnos** (estilo clásico de TV). Esquema completo en la migración `20260101000000_inicial.sql` (tablas de equipos, turnos, letras, etc.). |
 | **v2 — "Kaldora"** | Evolución a **plataforma de 4 juegos masivos**: cada jugador juega desde su celular **al mismo tiempo** (sin turnos). El equipo reemplaza a la sala de juego con 1 a N jugadores, y se suman Trivia de Velocidad, Basta! y Supervivencia. Backend reescrito: `20260103000000_kaldora_v2.sql` (destruye el esquema v1 y deja la v2 limpia). |
 | **v3** | Rosco pasa a modo **individual tipo Pasapalabra** (reloj total + pasapalabra por letra), se agrega **diccionario español + léxicos por categoría** para validar el Basta, y **perfil por correo** (quien ya jugó no se re-registra). |
+| **v4 — login multicanal** | El jugador recurrente vuelve con **correo, celular o PIN de jugador** (`JUG-######` generado al registrarse y copiable). `registros_jugadores` pasa a historial con una fila **vigente** por identidad (correo/celular únicos); las RPCs `unirse_sala` y `entrar_con_identificador` resuelven registro y login. |
 
 ## 2. Stack de tecnologías
 
@@ -102,7 +103,7 @@ arquitectura, seguridad, herramientas y despliegue.
 | `preguntas_supervivencia` / `supervivencia_respuestas` | Banco V/F y auditoría de rondas. |
 | `palabras` (v3) | Diccionario español + lunfardo argentino (**600k+ formas**, generado desde `an-array-of-spanish-words`, filtrado y deduplicado). |
 | `lexico_categorias` (v3) | Léxico por categoría (valida que la palabra "corresponda" a la categoría). |
-| `admins_autorizados`, `registros_jugadores` | Gestión de anfitriones (con roles) e **historial persistente** de datos de jugadores (nombre, apellido, teléfono, correo) — sobrevive a la salida y al borrado de salas; alimenta el perfil por correo. |
+| `admins_autorizados`, `registros_jugadores` | Gestión de anfitriones (con roles) e **historial persistente** de datos de jugadores (nombre, apellido, teléfono, correo, `pin_jugador`) — sobrevive a la salida y al borrado de salas; una sola fila **vigente** por identidad alimenta el login multicanal. |
 
 ### 4.2 Identidades (2 mundos)
 
@@ -114,9 +115,14 @@ arquitectura, seguridad, herramientas y despliegue.
   en `localStorage` del dispositivo (`kaldora_jugador`). Cada RPC de juego
   envía ese token y el servidor lo valida. El token **nunca** viaja por
   Realtime ni por lecturas REST.
-* **Perfil por correo** (v3): quien ya jugó alguna vez se identifica con su
-  correo (`perfil_por_correo`) y recupera nombre/apellido/teléfono sin
-  registrarse de nuevo.
+* **Login multicanal** (v4): el recurrente se identifica con **correo,
+  celular o su PIN de jugador** (`entrar_con_identificador`). El PIN
+  (`JUG-######`) lo genera el servidor en el registro, se muestra una vez
+  para copiar al portapapeles y vuelve en cada registro posterior. La tabla
+  de registros guarda **una fila vigente por identidad** (correo y celular
+  únicos, case/dígitos-insensibles) y rota las anteriores como historial; así
+  un correo tipeado mal no deja al jugador afuera (lo rescatan el celular o
+  el PIN). `perfil_por_correo` sigue precargando datos en el registro.
 
 ### 4.3 RPCs SECURITY DEFINER (toda la lógica de juego)
 
@@ -126,7 +132,8 @@ arquitectura, seguridad, herramientas y despliegue.
 * **Sala/host**: `crear_sala`, `mis_salas`, `borrar_sala`, `seleccionar_juego`,
   `pausar_partida`, `reanudar_partida`, `terminar_partida`, `volver_al_lobby`,
   `expulsar_jugador`, `cargar_banco`, gestión de admins.
-* **Jugador**: `unirse_sala` (nickname único por sala, devuelve token),
+* **Jugador**: `unirse_sala` (nickname único por sala, devuelve token +
+  `pinJugador`), `entrar_con_identificador` (login por correo/celular/PIN),
   `salir_sala`, `perfil_por_correo`.
 * **Rosco (v3, individual)**: `rosco_iniciar`, `rosco_enviar`, `rosco_pasar`,
   `rosco_cerrar`, `rosco_estado`. Internas: `rosco_letra_siguiente`
@@ -205,7 +212,8 @@ src/
 │   └── useAdminAuth.js           # Sesión Supabase Auth del anfitrión
 ├── game/constantes.js            # Reglas de los 4 juegos (espejo del servidor)
 ├── pages/
-│   ├── Landing.jsx               # Portal público (PIN + nickname + registro)
+│   ├── Landing.jsx               # Portal público: registro (con PIN de
+│   │                             #   jugador copiable) + login multicanal
 │   ├── SalaJugador.jsx           # HUB: muta a la vista del juego activo
 │   ├── jugador/                  # RoscoJugador, TriviaJugador, BastaJugador,
 │   │                             #   SupervivenciaJugador (+ espectador rojo)
@@ -278,10 +286,14 @@ supabase/migrations/
 ├── 20260113000000_registro_persistente.sql # Registro de jugadores sobrevive a salas/borrados
 ├── 20260114000000_auditoria_concurrencia.sql # Locks anti race conditions (ver docs/auditoria-tecnica.md)
 ├── 20260115000000_carga_masiva_v2.sql # Batch insert de una sentencia + sanitización XSS + tope 5000
-└── 20260116000000_endurecimiento.sql  # Seguridad: banco `preguntas` fuera de Realtime,
-                                       #   grants de escritura sobre PII revocados,
-                                       #   topes anti-abuso (200 jugadores/sala,
-                                       #   50 salas/host), validación icono/color
+├── 20260116000000_endurecimiento.sql  # Seguridad: banco `preguntas` fuera de Realtime,
+│                                      #   grants de escritura sobre PII revocados,
+│                                      #   topes anti-abuso (200 jugadores/sala,
+│                                      #   50 salas/host), validación icono/color
+└── 20260117000000_login_multicanal.sql  # v4: PIN de jugador único, fila vigente
+                                        #   por identidad (correo/celular únicos),
+                                        #   `unirse_sala` devuelve PIN y
+                                        #   `entrar_con_identificador` (login)
 ```
 
 Se aplican con **Supabase CLI**: `npx supabase link --project-ref <REF>` y
@@ -327,7 +339,8 @@ node scripts/test-importador.mjs  # pruebas del IMPORTADOR de bancos (parsing
                                 #   "Línea 42", re-evaluación por modo,
                                 #   consolidación sin desindexar, chunks)
 node scripts/test-e2e.mjs       # E2E contra Supabase REAL: simula anfitrión
-                                #   + jugadores, los 4 juegos completos y
+                                #   + jugadores, los 4 juegos completos, el
+                                #   login multicanal (PIN/correo/celular) y
                                 #   controles de seguridad (anon no puede
                                 #   crear salas, leer respuestas ni escribir
                                 #   tablas; Realtime entrega). Usa `ws`.

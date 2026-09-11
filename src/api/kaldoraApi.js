@@ -23,6 +23,26 @@ export function borrarSesionJugador() {
   localStorage.removeItem(JUGADOR_KEY);
 }
 
+// Arma y persiste la sesión del jugador a partir de la respuesta de una RPC
+// de entrada (unirse_sala / entrar_con_identificador).
+function guardarSesionDesdeRpc(data, extras = {}) {
+  const sesion = {
+    idSala: data.idSala,
+    codigo: data.codigo,
+    idJugador: data.idJugador,
+    nickname: data.nickname,
+    token: data.token,
+    icono: extras.icono,
+    color: extras.color,
+  };
+  guardarSesionJugador(sesion);
+  return {
+    ...sesion,
+    pinJugador: data.pinJugador ?? null,
+    recurrente: Boolean(data.recurrente),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Envoltorio de RPC con errores tipados
 // ---------------------------------------------------------------------------
@@ -99,15 +119,16 @@ export const api = {
       p_icono: icono,
       p_color: color,
     });
-    const sesion = {
-      idSala: data.idSala,
-      codigo: data.codigo,
-      idJugador: data.idJugador,
-      nickname: data.nickname,
-      token: data.token,
-    };
-    guardarSesionJugador(sesion);
-    return sesion;
+    return guardarSesionDesdeRpc(data, { icono, color });
+  },
+  entrarConIdentificador: async (codigo, identificador, { icono, color } = {}) => {
+    const data = await rpc('entrar_con_identificador', {
+      p_codigo: codigo,
+      p_identificador: identificador,
+      p_icono: icono,
+      p_color: color,
+    });
+    return guardarSesionDesdeRpc(data, { icono, color });
   },
   salirSala: (token = tokenJugador()) => rpc('salir_sala', { p_token: token }),
 

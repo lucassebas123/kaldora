@@ -104,6 +104,66 @@ verificar('registro: celular inválido rechazado', !!telMalo.error);
 const sinNombre = await j1.rpc('unirse_sala', { p_codigo: sala.codigo, p_nickname: 'E2E_Tres', p_nombre: '  ', p_apellido: 'Y', p_telefono: '1155550003', p_correo: 'ok@ok.com', p_icono: 'Star', p_color: 'bg-green-500' });
 verificar('registro: nombre obligatorio', !!sinNombre.error);
 
+// =============================================================================
+console.log('\n═══ 2b. LOGIN MULTICANAL (PIN de jugador · correo · celular) ═══');
+// =============================================================================
+const MARCA_MC = Date.now().toString(36);
+const DATOS_MC = {
+  p_nombre: 'Multi',
+  p_apellido: 'Canal',
+  p_telefono: `+54 9 11 7777-${String(Date.now()).slice(-4)}`,
+  p_correo: `multicanal.${MARCA_MC}@example.com`,
+};
+const { data: salaMC } = await host.rpc('crear_sala');
+verificar('sala multicanal creada', /^\d{6}$/.test(salaMC?.codigo || ''));
+
+const regMC = await j1.rpc('unirse_sala', {
+  p_codigo: salaMC.codigo, p_nickname: 'MC_Base', p_icono: 'Star', p_color: 'bg-purple-500', ...DATOS_MC,
+});
+verificar('registro devuelve PIN de jugador (JUG-######)', /^JUG-[0-9]{6}$/.test(regMC.data?.pinJugador || ''));
+verificar('cuenta nueva marca recurrente=false', regMC.data?.recurrente === false);
+
+const regMC2 = await j1.rpc('unirse_sala', {
+  p_codigo: salaMC.codigo, p_nickname: 'MC_Otra', p_icono: 'Flame', p_color: 'bg-blue-500', ...DATOS_MC,
+});
+verificar('re-registro con el mismo correo conserva el PIN y marca recurrente',
+  regMC2.data?.pinJugador === regMC.data.pinJugador && regMC2.data?.recurrente === true);
+
+const porPin = await j2.rpc('entrar_con_identificador', {
+  p_codigo: salaMC.codigo, p_identificador: regMC.data.pinJugador.toLowerCase(),
+});
+verificar('login con PIN de jugador OK (case-insensitive)',
+  !porPin.error && porPin.data?.token?.length === 32 && porPin.data?.pinJugador === regMC.data.pinJugador);
+
+const porCorreo = await j2.rpc('entrar_con_identificador', {
+  p_codigo: salaMC.codigo, p_identificador: DATOS_MC.p_correo.toUpperCase(),
+});
+verificar('login con correo OK (case-insensitive) y reutiliza la fila de la sala',
+  !porCorreo.error && porCorreo.data?.nickname === 'MC_Otra');
+
+const porCelular = await j2.rpc('entrar_con_identificador', {
+  p_codigo: salaMC.codigo, p_identificador: DATOS_MC.p_telefono,
+});
+verificar('login con celular OK (con formato +54 ...)',
+  !porCelular.error && porCelular.data?.token?.length === 32 && porCelular.data?.nickname === 'MC_Otra');
+
+const identMalo = await j2.rpc('entrar_con_identificador', {
+  p_codigo: salaMC.codigo, p_identificador: `nadie-${MARCA_MC}`,
+});
+verificar('identificador desconocido rechazado con mensaje claro',
+  !!identMalo.error && /No encontramos tu registro/.test(identMalo.error.message));
+
+const mcReabierta = await j1.rpc('entrar_con_identificador', {
+  p_codigo: salaMC.codigo, p_identificador: regMC.data.pinJugador, p_icono: 'Star', p_color: 'bg-purple-500',
+});
+const { data: jugsMC } = await anon.from('jugadores').select('id, nickname').eq('id_sala', salaMC.id);
+verificar('login reutiliza al jugador sin multiplicar filas en la sala',
+  !mcReabierta.error && jugsMC.length === 2);
+
+const anonPIIMC = await anon.from('registros_jugadores').select('pin_jugador').limit(1);
+verificar('SEGURIDAD: anon NO puede leer PINs de jugadores', !!anonPIIMC.error || (anonPIIMC.data || []).length === 0);
+await host.rpc('borrar_sala', { p_sala: salaMC.id });
+
 const anonCrea = await anon.rpc('crear_sala');
 verificar('SEGURIDAD: anon NO puede crear salas', !!anonCrea.error);
 

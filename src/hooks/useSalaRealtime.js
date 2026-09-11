@@ -76,6 +76,26 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     esAnfitrionRef.current = esAnfitrion;
   }, [esAnfitrion]);
 
+  // Suelta TODOS los canales de esta sala antes de crear uno nuevo.
+  // `supabase.channel(topic)` REUTILIZA el canal existente con el mismo topic
+  // (y el topic real del cliente lleva el prefijo `realtime:`); si queda uno
+  // suscrito, agregar `postgres_changes` explota ("after subscribe()") y el
+  // tiempo real de esa sala queda muerto hasta recargar. Pasa en remontajes
+  // (StrictMode, salir y volver a la misma sala), por eso el filtro cubre las
+  // dos formas del topic.
+  const limpiarCanalesDeSala = useCallback(async () => {
+    const candidatos = supabase
+      .getChannels()
+      .filter((c) => c.topic === `realtime:sala:${idSala}` || c.topic === `sala:${idSala}`);
+    for (const canal of candidatos) {
+      try {
+        await supabase.removeChannel(canal);
+      } catch {
+        /* ya removido o sin conexión */
+      }
+    }
+  }, [idSala]);
+
   // ---------------------------------------------------------------------------
   // Carga inicial / re-sincronización (polling de respaldo cada 3 s: los
   // relojes son por deadline y los eventos de broadcast dan el golpe seco,
@@ -183,15 +203,11 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       if (conectando) return;
       conectando = true;
       try {
-        const previo = canalRef.current;
         canalRef.current = null;
-        if (previo) {
-          try {
-            await supabase.removeChannel(previo);
-          } catch {
-            /* ya removido o sin conexión */
-          }
-        }
+        // Primero se libera el canal previo (y cualquier huérfano del mismo
+        // topic) antes de crear uno nuevo: nunca se pisan dos suscripciones
+        // con el mismo topic en la misma conexión.
+        await limpiarCanalesDeSala();
         if (desmontado) return;
 
         const canal = supabase
@@ -311,15 +327,13 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       clearInterval(intervaloPolling);
       // Remueve el canal vigente y cualquier reconexión en vuelo del mismo
       // topic (la reconexión es asíncrona y puede crear uno tras el unmount).
-      supabase
-        .getChannels()
-        .filter((c) => c.topic === `sala:${idSala}`)
-        .forEach((c) => supabase.removeChannel(c));
+      // El próximo `conectar()` espera a que estos canales desaparezcan.
+      void limpiarCanalesDeSala();
       canalRef.current = null;
       trackeadoRef.current = false;
       setOnline(new Set());
     };
-  }, [idSala, recargar, sincronizarPresencia, trackear, pingReloj, emisor]);
+  }, [idSala, recargar, sincronizarPresencia, trackear, pingReloj, emisor, limpiarCanalesDeSala]);
 
   // Re-trackear cuando el jugador consigue su sesión (join tardío).
   useEffect(() => {
