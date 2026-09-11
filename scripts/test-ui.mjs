@@ -6,7 +6,8 @@
 //   3. Anfitrión: login + crear sala + lanzar CADA juego → los paneles
 //      renderizan (aquí se detecta el "pantalla en blanco")
 //   4. Jugador muta al juego lanzado (rosco, trivia, basta, supervivencia)
-//   5. Invitación sin token: /admin/invitacion muestra "link vencido" sin crash
+//   5. Invitación: #type=invite redirige a /admin/invitacion y un token
+//      inválido muestra "link vencido" sin crash
 //   6. Cero errores de consola tipo ReferenceError/blank screen
 //
 // Uso: node scripts/test-ui.mjs
@@ -170,19 +171,39 @@ const podio = await pagJugador.locator('body').getByText(/Podio final|Partida fi
 verificar('podio en el celular del jugador', podio);
 
 // -----------------------------------------------------------------------------
-console.log('\n═══ 4b. Aceptar invitación sin token ═══');
+console.log('\n═══ 4b. Aceptar invitación ═══');
 const ctxInvitado = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const pagInvitado = await ctxInvitado.newPage();
 pagInvitado.on('pageerror', (e) => erroresJS.push(`INVITADO: ${e.message}`));
-await pagInvitado.goto(`${BASE}/admin/invitacion`, { waitUntil: 'domcontentloaded' });
+
+// 1) El mail aterriza en la Site URL (raíz) con #type=invite: la app debe
+//    redirigir sola a /admin/invitacion (acá con un token inválido → error).
+await pagInvitado.goto(`${BASE}/#access_token=token-falso&refresh_token=x&type=invite`, {
+  waitUntil: 'domcontentloaded',
+});
+const redirigido = await pagInvitado
+  .waitForURL('**/admin/invitacion', { timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('link de invitación (#type=invite) redirige a /admin/invitacion', redirigido);
 const linkVencido = await pagInvitado
   .getByText(/ya venció|link inválido|No encontramos una invitación/i)
   .first()
   .waitFor({ timeout: 15000 })
   .then(() => true)
   .catch(() => false);
-verificar('/admin/invitacion sin token → link vencido (sin crash)', linkVencido);
+verificar('invitación con token inválido → link vencido (sin crash)', linkVencido);
 if (!linkVencido) console.log('    [debug invitación]', (await pagInvitado.locator('body').innerText()).slice(0, 250).replace(/\n/g, ' | '));
+
+// 2) Entrada directa sin token.
+await pagInvitado.goto(`${BASE}/admin/invitacion`, { waitUntil: 'domcontentloaded' });
+const directoVencido = await pagInvitado
+  .getByText(/ya venció|link inválido|No encontramos una invitación/i)
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('/admin/invitacion sin token → link vencido (sin crash)', directoVencido);
 await ctxInvitado.close();
 
 // -----------------------------------------------------------------------------

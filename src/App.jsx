@@ -1,6 +1,7 @@
-import React, { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAdminAuth } from './hooks/useAdminAuth';
+import { supabase, HASH_INICIAL } from './supabaseClient';
 import AvisoActualizacion from './components/AvisoActualizacion';
 import { Loader2 } from 'lucide-react';
 
@@ -12,6 +13,44 @@ const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AceptarInvitacion = lazy(() => import('./pages/admin/AceptarInvitacion'));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 const AdminSala = lazy(() => import('./pages/admin/AdminSala'));
+
+// Tipo de auth que traía el link al arrancar (invite / recovery / null).
+const TIPO_AUTH = new URLSearchParams(HASH_INICIAL.replace(/^#/, '')).get('type') || '';
+const ES_INVITACION = TIPO_AUTH === 'invite' || TIPO_AUTH === 'recovery';
+
+/**
+ * El mail de invitación de Supabase aterriza en la Site URL (la raíz del
+ * sitio). Apenas el link trae `type=invite`/`recovery`, esta redirección manda
+ * al invitado a /admin/invitacion para que defina su contraseña, sin importar
+ * en qué ruta haya caído. La sesión la crea supabase-js desde el hash.
+ */
+function RedirigirInvitacion() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!ES_INVITACION) return undefined;
+    let vigente = true;
+    const ir = () => {
+      if (vigente) navigate('/admin/invitacion', { replace: true });
+    };
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data.session) ir();
+      })
+      .catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((evento) => {
+      if (evento === 'SIGNED_IN' || evento === 'PASSWORD_RECOVERY') ir();
+    });
+    // Red de seguridad: si el token venció, /admin/invitacion muestra el error.
+    const t = setTimeout(ir, 2500);
+    return () => {
+      vigente = false;
+      clearTimeout(t);
+      sub.subscription.unsubscribe();
+    };
+  }, [navigate]);
+  return null;
+}
 
 /**
  * Guard de ruta administrativa: solo anfitriones con sesión de Supabase Auth.
@@ -47,6 +86,7 @@ function CargandoRuta() {
 export default function App() {
   return (
     <BrowserRouter>
+      <RedirigirInvitacion />
       <AvisoActualizacion />
       <Suspense fallback={<CargandoRuta />}>
         <Routes>

@@ -126,11 +126,11 @@ arquitectura, seguridad, herramientas y despliegue.
   el PIN). `perfil_por_correo` sigue precargando datos en el registro.
 * **Alta de operadores**: no hay registro público. El dueño invita desde el
   panel (`Authentication → Users → Add user → Invite`); el trigger
-  `trg_admin_automatico` registra al invitado como `operador` y el link del
-  mail aterriza en `/admin/invitacion`, donde define su contraseña
-  (`supabase.auth.updateUser`). Requiere Site URL + Redirect URLs apuntando a
-  kaldora.site en la configuración de Auth del proyecto (Authentication →
-  URL Configuration).
+  `trg_admin_automatico` registra al invitado como `operador` y la app
+  detecta el `type=invite` del link para llevarlo a `/admin/invitacion`,
+  donde define su contraseña (`supabase.auth.updateUser`). Requiere Site URL
+  + Redirect URLs apuntando a kaldora.site en la configuración de Auth del
+  proyecto (Authentication → URL Configuration).
 
 ### 4.3 RPCs SECURITY DEFINER (toda la lógica de juego)
 

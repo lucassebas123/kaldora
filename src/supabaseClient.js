@@ -10,6 +10,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// Hash de la URL al arrancar, ANTES de que supabase-js lo consuma: los links
+// de invitación/recuperación llegan como #access_token=...&type=invite y la
+// app los usa para redirigir a /admin/invitacion (ver App.jsx).
+export const HASH_INICIAL = typeof window !== 'undefined' ? window.location.hash : '';
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
