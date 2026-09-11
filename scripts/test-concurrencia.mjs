@@ -157,6 +157,7 @@ verificar('el host ve el índice correcto de la pregunta', pregTInfo?.indice_cor
     sesiones.map((s, i) => s.client.rpc('trivia_responder', {
       p_token: s.token,
       p_opcion: i < 7 ? pregTInfo.indice_correcto : incorrecta,
+      p_pregunta_id: juegoT.juego.pregunta_id,
     }))
   );
   verificar(`trivia: 10/10 respuestas aceptadas sin errores (${resultados.ms} ms)`, resultados.ok.length === N);
@@ -172,7 +173,11 @@ verificar('el host ve el índice correcto de la pregunta', pregTInfo?.indice_cor
 
   // DOBLE-TAP: los 10 re-responden simultáneamente → todos rechazados.
   const doble = await disparoSimultaneo(sesiones.map((s) =>
-    s.client.rpc('trivia_responder', { p_token: s.token, p_opcion: pregTInfo.indice_correcto })));
+    s.client.rpc('trivia_responder', {
+      p_token: s.token,
+      p_opcion: pregTInfo.indice_correcto,
+      p_pregunta_id: juegoT.juego.pregunta_id,
+    })));
   verificar(`doble-tap: 10/10 rechazados con 'Ya respondiste' (${doble.ms} ms)`,
     doble.errores.length === N && doble.errores.every((e) =>
       String(e.value?.error?.message || e.reason?.message || '').includes('Ya respondiste')));

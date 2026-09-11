@@ -209,6 +209,7 @@ src/
 │   ├── useSalaRealtime.js        # Canal único: postgres_changes, presence,
 │   │                             #   broadcast, reloj, vigilante, polling
 │   ├── useCuentaAtras.js         # Countdown por deadline + offset de reloj
+│   ├── useFeedBurbujas.js        # Burbujas en vivo en los paneles del host
 │   └── useAdminAuth.js           # Sesión Supabase Auth del anfitrión
 ├── game/constantes.js            # Reglas de los 4 juegos (espejo del servidor)
 ├── pages/
@@ -294,10 +295,13 @@ supabase/migrations/
 │                                       #   por identidad (correo/celular únicos),
 │                                       #   `unirse_sala` devuelve PIN y
 │                                       #   `entrar_con_identificador` (login)
-└── 20260118000000_auditoria_v2.sql     # Auditoría: Basta multi-ronda sin doble
-                                       #   conteo, locks (trivia/rosco), cupo,
-                                       #   juego_activo NULL-safe, crear_sala
-                                       #   exige admin, índice FK registros
+├── 20260118000000_auditoria_v2.sql     # Auditoría: Basta multi-ronda sin doble
+│                                       #   conteo, locks (trivia/rosco), cupo,
+│                                       #   juego_activo NULL-safe, crear_sala
+│                                       #   exige admin, índice FK registros
+└── 20260119000000_trivia_pregunta_vinculada.sql # V5: la respuesta de trivia
+                                        #   viaja atada a la pregunta vista y el
+                                        #   servidor rechaza id ajeno (rotación)
 ```
 
 Se aplican con **Supabase CLI**: `npx supabase link --project-ref <REF>` y

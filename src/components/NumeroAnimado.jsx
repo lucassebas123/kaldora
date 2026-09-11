@@ -12,16 +12,20 @@ export default function NumeroAnimado({ valor = 0, className = '', duracionMs = 
   // de animación, el odómetro re-arranca desde donde está, sin saltar atrás.
   const mostradoRef = useRef(valor);
   const rafRef = useRef(0);
+  // Una sola lectura por montaje: con "reducir movimiento" se dibuja el valor
+  // directo (sin animar) y el efecto no necesita setState sincrónico.
+  const [reducido] = useState(
+    () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  );
 
   useEffect(() => {
     const desde = mostradoRef.current;
     const hasta = valor;
-    if (desde === hasta) return undefined;
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (reducido) {
       mostradoRef.current = hasta;
-      setMostrado(hasta);
       return undefined;
     }
+    if (desde === hasta) return undefined;
 
     const t0 = performance.now();
     cancelAnimationFrame(rafRef.current);
@@ -39,7 +43,7 @@ export default function NumeroAnimado({ valor = 0, className = '', duracionMs = 
     };
     rafRef.current = requestAnimationFrame(paso);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [valor, duracionMs]);
+  }, [valor, duracionMs, reducido]);
 
-  return <span className={className}>{mostrado}</span>;
+  return <span className={className}>{reducido ? valor : mostrado}</span>;
 }

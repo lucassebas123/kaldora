@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 // --- carga de .env (sin dependencia externa) --------------------------------
@@ -265,12 +266,17 @@ const { data: pregTHost } = await host
 verificar('host ve indice_correcto', Number.isInteger(pregTHost?.indice_correcto));
 
 // J1 responde correcto al instante (base ~1000), J2 responde mal.
-const rT1 = await j1.rpc('trivia_responder', { p_token: unido1.data.token, p_opcion: pregTHost.indice_correcto });
-verificar('respuesta correcta: puntos ~1000 y racha 1', !rT1.error && rT1.data?.correcta === true && rT1.data?.puntos > 800 && rT1.data?.racha === 1);
+const preguntaIdTrivia = salaTrivia.juego.pregunta_id;
+const rT1 = await j1.rpc('trivia_responder', { p_token: unido1.data.token, p_opcion: pregTHost.indice_correcto, p_pregunta_id: preguntaIdTrivia });
+verificar('respuesta correcta: puntúa (base 1000 decreciente) y racha 1', !rT1.error && rT1.data?.correcta === true && rT1.data?.puntos > 500 && rT1.data?.puntos <= 1000 && rT1.data?.racha === 1);
 const opcionIncorrecta = (pregTHost.indice_correcto + 1) % preguntaTAnon.opciones.length;
-const rT2 = await j2.rpc('trivia_responder', { p_token: unido2.data.token, p_opcion: opcionIncorrecta });
+// V5: la opción viaja atada a la pregunta que el jugador vio; con el id de
+// otra pregunta se rechaza ANTES de registrar nada (ventana de rotación).
+const rTV5 = await j2.rpc('trivia_responder', { p_token: unido2.data.token, p_opcion: opcionIncorrecta, p_pregunta_id: randomUUID() });
+verificar('V5: respuesta atada a la pregunta vista (id ajeno rechazado)', !!rTV5.error && /La pregunta ya cambió/.test(rTV5.error.message));
+const rT2 = await j2.rpc('trivia_responder', { p_token: unido2.data.token, p_opcion: opcionIncorrecta, p_pregunta_id: preguntaIdTrivia });
 verificar('respuesta errada: 0 pts y racha 0', !rT2.error && rT2.data?.correcta === false && rT2.data?.puntos === 0 && rT2.data?.racha === 0);
-const rT1dup = await j1.rpc('trivia_responder', { p_token: unido1.data.token, p_opcion: pregTHost.indice_correcto });
+const rT1dup = await j1.rpc('trivia_responder', { p_token: unido1.data.token, p_opcion: pregTHost.indice_correcto, p_pregunta_id: preguntaIdTrivia });
 verificar('doble respuesta rechazada', !!rT1dup.error);
 console.log(`     racha: J1 = ${rT1.data?.racha} (mult ${rT1.data?.multiplicador}x)`);
 
@@ -449,55 +455,69 @@ verificar('SEGURIDAD: anon NO puede leer sesiones_jugador', !!anonSes.error || (
 const anonRpcHost = await anon.rpc('terminar_partida', { p_sala: sala.id });
 verificar('SEGURIDAD: anon NO puede ejecutar RPCs de host', !!anonRpcHost.error);
 
-// Sincronización como la usa la app: el anfitrión publica la instantánea
+// Sincronización como la que usa la app: el anfitrión publica la instantánea
 // por BROADCAST y el jugador la aplica al instante (postgres_changes queda
 // como bonus, no como requisito — su entrega en el plan free es intermitente).
-const sincronia = await new Promise(async (resolve) => {
-  const canalJugador = j1.channel(`e2e-sync-${sala.id}`);
-  const canalHost = host.channel(`e2e-sync-${sala.id}`);
+// El test REINTENTA (reenvía cada 1.5 s hasta 20 s): una entrega perdida no
+// debe hacer flaquear la suite.
+const sincronia = await new Promise((resolve) => {
+  const topic = `e2e-sync-${sala.id}`;
+  const canalJugador = j1.channel(topic);
+  const canalHost = host.channel(topic);
   const ok = { hostAjugador: false, jugadorAhost: false };
   let resuelto = false;
-  const cerrar = () => {
-    if (ok.hostAjugador && ok.jugadorAhost && !resuelto) {
-      resuelto = true;
-      clearTimeout(timeout);
-      resolve(ok);
+  let intervalo = null;
+  let timeout = null;
+
+  const finalizar = () => {
+    if (resuelto) return;
+    resuelto = true;
+    if (intervalo) clearInterval(intervalo);
+    clearTimeout(timeout);
+    resolve(ok);
+  };
+
+  // Dirección A (host→jugador), lo mismo que hace publicarEstado; dirección B
+  // (jugador→host), lo mismo que avisan los contadores en vivo.
+  const reenviar = () => {
+    if (ok.hostAjugador && ok.jugadorAhost) {
+      finalizar();
+      return;
+    }
+    canalHost.send({
+      type: 'broadcast',
+      event: 'ev',
+      payload: { tipo: 'sala', idSala: sala.id, sala: { id: sala.id }, jugadores: [] },
+    });
+    canalJugador.send({
+      type: 'broadcast',
+      event: 'ev',
+      payload: { tipo: 'trivia_resp', idPregunta: sala.id, correcta: true },
+    });
+  };
+
+  // Los listeners se registran ANTES de subscribe (orden que exige el canal).
+  canalJugador.on('broadcast', { event: 'ev' }, ({ payload }) => {
+    if (payload?.tipo === 'sala' && payload.idSala === sala.id) ok.hostAjugador = true;
+    if (ok.hostAjugador && ok.jugadorAhost) finalizar();
+  });
+  canalHost.on('broadcast', { event: 'ev' }, ({ payload }) => {
+    if (payload?.tipo === 'trivia_resp') ok.jugadorAhost = true;
+    if (ok.hostAjugador && ok.jugadorAhost) finalizar();
+  });
+
+  let suscritos = 0;
+  const alSuscribir = (status) => {
+    if (status !== 'SUBSCRIBED') return;
+    suscritos++;
+    if (suscritos === 2) {
+      reenviar();
+      intervalo = setInterval(reenviar, 1500);
     }
   };
-  const timeout = setTimeout(() => {
-    if (!resuelto) { resuelto = true; resolve(ok); }
-  }, 10000);
-  canalJugador
-    .on('broadcast', { event: 'ev' }, ({ payload }) => {
-      if (payload?.tipo === 'sala' && payload.idSala === sala.id) ok.hostAjugador = true;
-      cerrar();
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await canalHost.subscribe(async (st2) => {
-          if (st2 === 'SUBSCRIBED') {
-            canalHost.on('broadcast', { event: 'ev' }, ({ payload }) => {
-              if (payload?.tipo === 'trivia_resp') ok.jugadorAhost = true;
-              cerrar();
-            });
-            await esperar(300);
-            // Dirección A (host→jugador), lo mismo que hace publicarEstado:
-            canalHost.send({
-              type: 'broadcast',
-              event: 'ev',
-              payload: { tipo: 'sala', idSala: sala.id, sala: { id: sala.id }, jugadores: [] },
-            });
-            // Dirección B (jugador→host), lo mismo que avisan los contadores
-            // en vivo ("respondieron", palabras del Basta, "¡cantó BASTA!"):
-            canalJugador.send({
-              type: 'broadcast',
-              event: 'ev',
-              payload: { tipo: 'trivia_resp', idPregunta: sala.id, correcta: true },
-            });
-          }
-        });
-      }
-    });
+  timeout = setTimeout(finalizar, 20000);
+  canalJugador.subscribe(alSuscribir);
+  canalHost.subscribe(alSuscribir);
 });
 verificar('SINCRONÍA: la instantánea del anfitrión llega al celular (host→jugador)', sincronia.hostAjugador === true);
 verificar('SINCRONÍA: los avisos del jugador llegan al anfitrión (jugador→host, contadores en vivo)', sincronia.jugadorAhost === true);

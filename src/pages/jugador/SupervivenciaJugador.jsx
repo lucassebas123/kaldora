@@ -32,22 +32,23 @@ export default function SupervivenciaJugador({
   const [pregunta, setPregunta] = useState(null);
   const [respuestaEnviada, setRespuestaEnviada] = useState(null); // {correcta, eliminado}
   const [enviando, setEnviando] = useState(false);
-  const [eliminado, setEliminado] = useState(false);
+  const [eliminadoRpc, setEliminadoRpc] = useState(false);
   const [velo, setVelo] = useState(null);
   const procesadoRef = useRef(null);
 
   const vivos = jugadores.filter((j) => !j.eliminado);
+  // Eliminado: primero por RPC (instantáneo), confirmado por Realtime.
+  const eliminado = eliminadoRpc || Boolean(jugadorPropio?.eliminado);
 
-  // Estado eliminado: primero por RPC (instantáneo), confirmado por Realtime.
-  useEffect(() => {
-    if (jugadorPropio?.eliminado) setEliminado(true);
-  }, [jugadorPropio?.eliminado]);
-
-  // Reset por ronda.
-  useEffect(() => {
+  // Reset por ronda (en render, sin efecto que setee estado sincrónico).
+  const [preguntaPrevia, setPreguntaPrevia] = useState(idPregunta);
+  if (preguntaPrevia !== idPregunta) {
+    setPreguntaPrevia(idPregunta);
     setRespuestaEnviada(null);
     setPregunta(null);
-    if (!idPregunta) return;
+  }
+  useEffect(() => {
+    if (!idPregunta) return undefined;
     let vigente = true;
     consultas
       .preguntaSupervivenciaPorId(idPregunta)
@@ -110,7 +111,7 @@ export default function SupervivenciaJugador({
         setVelo({ tipo: 'fallo', clave: Date.now() });
         if (res.eliminado) {
           setTimeout(() => {
-            setEliminado(true);
+            setEliminadoRpc(true);
             vibrarEliminado();
           }, 900);
         }

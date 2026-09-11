@@ -8,7 +8,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, SkipForward } from 'lucide-react';
 import RankingJugadores from '../../../components/RankingJugadores';
-import FeedBurbujas, { useFeedBurbujas } from '../../../components/FeedBurbujas';
+import FeedBurbujas from '../../../components/FeedBurbujas';
+import { useFeedBurbujas } from '../../../hooks/useFeedBurbujas';
 import { SkeletonLineas } from '../../../components/Skeleton';
 import { useCuentaAtras, calcularFin, formatearMs } from '../../../hooks/useCuentaAtras';
 import { useEventoSala } from '../../../hooks/useSalaRealtime';

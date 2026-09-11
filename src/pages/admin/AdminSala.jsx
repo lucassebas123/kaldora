@@ -8,7 +8,7 @@
 //
 // La ruta está protegida por Supabase Auth (ver App.jsx / RutaProtegida).
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -41,7 +41,7 @@ export default function AdminSala() {
   const [mostrarBanco, setMostrarBanco] = useState(false);
   const [aviso, setAviso] = useState(null);
 
-  async function ejecutar(fn) {
+  const ejecutar = useCallback(async (fn) => {
     if (trabajando) return;
     setTrabajando(true);
     setAviso(null);
@@ -57,7 +57,7 @@ export default function AdminSala() {
     } finally {
       setTrabajando(false);
     }
-  }
+  }, [publicarEstado, trabajando]);
 
   // ---------------------------------------------------------------------------
   // ATAJOS DE TECLADO para el anfitrión:
@@ -283,9 +283,12 @@ function LobbyAnfitrion({ sala, jugadores, online, ejecutar, trabajando }) {
   const urlUnirse = `${URL_BASE}/?sala=${sala.codigo}`;
   const [copiado, setCopiado] = useState(false);
 
-  useEffect(() => {
+  // Si cambia el juego de la sala, se refleja en el selector (en render).
+  const [juegoPrevio, setJuegoPrevio] = useState(sala.juego_actual || null);
+  if (juegoPrevio !== (sala.juego_actual || null)) {
+    setJuegoPrevio(sala.juego_actual || null);
     setJuegoElegido(sala.juego_actual || null);
-  }, [sala.juego_actual]);
+  }
 
   async function lanzar() {
     if (!juegoElegido) return;

@@ -27,7 +27,8 @@ const BASE = 'http://localhost:5173';
 let pasadas = 0;
 let falladas = 0;
 function verificar(desc, ok) {
-  ok ? pasadas++ : falladas++;
+  if (ok) pasadas++;
+  else falladas++;
   console.log(`  ${ok ? '✓' : '✗ FALLO:'} ${desc}`);
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));

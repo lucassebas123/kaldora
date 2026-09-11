@@ -43,14 +43,16 @@ export default function RoscoJugador({ sala, sesion, jugadorPropio, offsetReloj,
   const [enviando, setEnviando] = useState(false);
   const [flash, setFlash] = useState(null);
   const [velo, setVelo] = useState(null);
-  const [restaurando, setRestaurando] = useState(false);
+  const [restaurando, setRestaurando] = useState(Boolean(sesion?.token));
   const cerradoRef = useRef(null);
 
-  // Nueva partida: limpiar el estado local.
-  useEffect(() => {
+  // Nueva partida: limpiar el estado local (en render, al cambiar `inicio`).
+  const [inicioPrevio, setInicioPrevio] = useState(inicio);
+  if (inicioPrevio !== inicio) {
+    setInicioPrevio(inicio);
     setMiRosco(null);
     setFlash(null);
-  }, [juego.inicio]);
+  }
 
   // Cuenta atrás TOTAL (continua; se congela si el anfitrión pausa).
   const { msRestantes, progreso } = useCuentaAtras({
@@ -60,28 +62,35 @@ export default function RoscoJugador({ sala, sesion, jugadorPropio, offsetReloj,
     congelada,
   });
 
-  // Pregunta de la letra activa (la fija el servidor).
+  // Pregunta de la letra activa (la fija el servidor). El reseteo de la
+  // pregunta/texto ocurre en render al cambiar `preguntaId`.
+  const [preguntaIdPrevio, setPreguntaIdPrevio] = useState(preguntaId);
+  if (preguntaIdPrevio !== preguntaId) {
+    setPreguntaIdPrevio(preguntaId);
+    setPregunta(null);
+    setTexto('');
+  }
   useEffect(() => {
-    if (!preguntaId) {
-      setPregunta(null);
-      return;
-    }
+    if (!preguntaId) return undefined;
     let vigente = true;
     consultas
       .preguntaRoscoPorId(preguntaId)
       .then((p) => vigente && setPregunta(p))
       .catch(() => vigente && setPregunta(null));
-    setTexto('');
     return () => {
       vigente = false;
     };
   }, [preguntaId]);
 
   // Restaurar mi rosco tras recargar la página (letra, pregunta y estados).
+  const [tokenPrevio, setTokenPrevio] = useState(sesion?.token);
+  if (tokenPrevio !== sesion?.token) {
+    setTokenPrevio(sesion?.token);
+    setRestaurando(Boolean(sesion?.token));
+  }
   useEffect(() => {
     if (!sesion?.token) return undefined;
     let vigente = true;
-    setRestaurando(true);
     api
       .roscoEstado()
       .then((estado) => {

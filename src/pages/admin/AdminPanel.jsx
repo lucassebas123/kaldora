@@ -19,6 +19,16 @@ const ETIQUETA_ESTADO = {
   finalizado: { texto: 'Finalizada', clase: 'bg-white/10 text-[#B8AFD9] border-white/15' },
 };
 
+// Cargas independientes: si falla una, la otra igual se muestra.
+async function traerDatos() {
+  const [resSalas, resAdmins] = await Promise.allSettled([api.misSalas(), consultas.listarAdmins()]);
+  return {
+    salas: resSalas.status === 'fulfilled' ? resSalas.value || [] : null,
+    admins: resAdmins.status === 'fulfilled' ? resAdmins.value || [] : null,
+    fallo: [resSalas, resAdmins].find((r) => r.status === 'rejected') || null,
+  };
+}
+
 export default function AdminPanel() {
   const navigate = useNavigate();
   const { email, salir } = useAdminAuth();
@@ -28,17 +38,24 @@ export default function AdminPanel() {
   const [error, setError] = useState(null);
 
   const cargar = useCallback(async () => {
-    // Cargas independientes: si falla una, la otra igual se muestra.
-    const [resSalas, resAdmins] = await Promise.allSettled([api.misSalas(), consultas.listarAdmins()]);
-    if (resSalas.status === 'fulfilled') setSalas(resSalas.value || []);
-    if (resAdmins.status === 'fulfilled') setAdmins(resAdmins.value || []);
-    const fallo = [resSalas, resAdmins].find((r) => r.status === 'rejected');
+    const { salas: s, admins: a, fallo } = await traerDatos();
+    if (s) setSalas(s);
+    if (a) setAdmins(a);
     setError(fallo ? fallo.reason?.message || 'No pudimos cargar el panel.' : null);
   }, []);
 
   useEffect(() => {
-    cargar();
-  }, [cargar]);
+    let vigente = true;
+    traerDatos().then(({ salas: s, admins: a, fallo }) => {
+      if (!vigente) return;
+      if (s) setSalas(s);
+      if (a) setAdmins(a);
+      setError(fallo ? fallo.reason?.message || 'No pudimos cargar el panel.' : null);
+    });
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   async function crearSala() {
     setCreando(true);

@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Landing from './pages/Landing';
-import SalaJugador from './pages/SalaJugador';
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminPanel from './pages/admin/AdminPanel';
-import AdminSala from './pages/admin/AdminSala';
 import { useAdminAuth } from './hooks/useAdminAuth';
 import AvisoActualizacion from './components/AvisoActualizacion';
 import { Loader2 } from 'lucide-react';
+
+// Code-splitting por ruta: cada página se descarga recién cuando se entra
+// (el portal del jugador no paga el peso del panel de administración).
+const Landing = lazy(() => import('./pages/Landing'));
+const SalaJugador = lazy(() => import('./pages/SalaJugador'));
+const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
+const AdminSala = lazy(() => import('./pages/admin/AdminSala'));
 
 /**
  * Guard de ruta administrativa: solo anfitriones con sesión de Supabase Auth.
@@ -30,36 +33,48 @@ function RutaProtegida({ children }) {
   return children;
 }
 
+/** Fallback mientras se descarga el chunk de la ruta. */
+function CargandoRuta() {
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-[#0B0616] text-[#B8AFD9]">
+      <Loader2 className="animate-spin mr-3" />
+      Cargando...
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AvisoActualizacion />
-      <Routes>
-        {/* Público: jugadores */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/jugar/:codigo" element={<SalaJugador />} />
+      <Suspense fallback={<CargandoRuta />}>
+        <Routes>
+          {/* Público: jugadores */}
+          <Route path="/" element={<Landing />} />
+          <Route path="/jugar/:codigo" element={<SalaJugador />} />
 
-        {/* Administración (Supabase Auth) */}
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route
-          path="/admin"
-          element={
-            <RutaProtegida>
-              <AdminPanel />
-            </RutaProtegida>
-          }
-        />
-        <Route
-          path="/admin/sala/:id"
-          element={
-            <RutaProtegida>
-              <AdminSala />
-            </RutaProtegida>
-          }
-        />
+          {/* Administración (Supabase Auth) */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route
+            path="/admin"
+            element={
+              <RutaProtegida>
+                <AdminPanel />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/admin/sala/:id"
+            element={
+              <RutaProtegida>
+                <AdminSala />
+              </RutaProtegida>
+            }
+          />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

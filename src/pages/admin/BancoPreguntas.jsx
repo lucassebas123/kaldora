@@ -26,6 +26,14 @@ const EJEMPLOS = {
   supervivencia: 'Los pingüinos viven en el Ártico | F\nEl monte Everest es la montaña más alta | Verdadero',
 };
 
+// Listado del banco activo (una sola definición para la carga inicial y los
+// recargues posteriores al importar).
+async function listarBanco(banco) {
+  if (banco === 'rosco') return consultas.listarBancoRosco();
+  if (banco === 'trivia') return consultas.listarBancoTrivia();
+  return consultas.listarBancoSupervivencia();
+}
+
 export default function BancoPreguntas({ onCerrar }) {
   const [banco, setBanco] = useState('rosco');
   const [filas, setFilas] = useState(null);
@@ -39,36 +47,30 @@ export default function BancoPreguntas({ onCerrar }) {
   const [resultadoImport, setResultadoImport] = useState(null);
   const [importando, setImportando] = useState(false);
   const [progresoLectura, setProgresoLectura] = useState(null); 
-  const [preview, setPreview] = useState(null);
+  const [previewCrudo, setPreviewCrudo] = useState(null);
 
   // PREVIEW con debounce (esc. 4/7): re-evalúa todo el texto bajo las reglas
   // del modo activo, pero sin re-parsear en cada tecla (los lotes grandes
   // pueden tener miles de líneas).
   useEffect(() => {
-    if (!texto.trim()) {
-      setPreview(null);
-      return undefined;
-    }
+    if (!texto.trim()) return undefined;
     const t = setTimeout(() => {
       try {
-        setPreview(importarBanco(texto, banco));
+        setPreviewCrudo(importarBanco(texto, banco));
       } catch {
-        setPreview(null);
+        setPreviewCrudo(null);
       }
     }, 300);
     return () => clearTimeout(t);
   }, [texto, banco]);
 
+  // Sin texto no se muestra preview (el estado viejo se ignora en render).
+  const preview = texto.trim() ? previewCrudo : null;
+
   const cargarBanco = useCallback(async () => {
     setCargando(true);
     try {
-      const data =
-        banco === 'rosco'
-          ? await consultas.listarBancoRosco()
-          : banco === 'trivia'
-            ? await consultas.listarBancoTrivia()
-            : await consultas.listarBancoSupervivencia();
-      setFilas(data);
+      setFilas(await listarBanco(banco));
     } catch (err) {
       setAviso(err.message);
     } finally {
@@ -77,8 +79,21 @@ export default function BancoPreguntas({ onCerrar }) {
   }, [banco]);
 
   useEffect(() => {
-    cargarBanco();
-  }, [cargarBanco]);
+    let vigente = true;
+    listarBanco(banco)
+      .then((data) => {
+        if (vigente) setFilas(data);
+      })
+      .catch((err) => {
+        if (vigente) setAviso(err.message);
+      })
+      .finally(() => {
+        if (vigente) setCargando(false);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [banco]);
 
   async function guardar(filasNuevas, index) {
     setGuardandoId(index);
@@ -193,7 +208,12 @@ export default function BancoPreguntas({ onCerrar }) {
           {BANCOS.map((b) => (
             <button
               key={b.id}
-              onClick={() => { setBanco(b.id); setResultadoImport(null); }}
+              onClick={() => {
+                if (b.id === banco) return;
+                setBanco(b.id);
+                setResultadoImport(null);
+                setCargando(true);
+              }}
               className={`rounded-2xl border px-3 py-2.5 text-left transition ${
                 banco === b.id
                   ? 'border-amber-400/70 bg-amber-400/10'
@@ -359,11 +379,15 @@ function ListadoRosco({ filas, guardandoId, guardar, eliminar }) {
 function FilaRosco({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
   // El `id` viaja dentro del estado para que guardar() haga UPDATE y no INSERT.
   const normalizar = () => ({ id: fila.id, letra: fila.letra || 'A', pregunta: fila.pregunta || '', respuesta: fila.respuesta || '' });
-  const [estado, setEstado] = useState(normalizar);
   const claveFila = JSON.stringify([fila.id, fila.letra, fila.pregunta, fila.respuesta]);
-  useEffect(() => {
+  const [estado, setEstado] = useState(normalizar);
+  const [claveEstado, setClaveEstado] = useState(claveFila);
+  // Resincroniza el editor cuando la fila del servidor cambia (patrón React
+  // "adjusting state during render": evita el efecto con deps incompletas).
+  if (claveEstado !== claveFila) {
+    setClaveEstado(claveFila);
     setEstado(normalizar());
-  }, [claveFila]); 
+  }
 
   const modificado = nuevo || claveFila !== JSON.stringify([estado.id, estado.letra, estado.pregunta, estado.respuesta]);
   return (
@@ -432,11 +456,13 @@ function FilaTrivia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
     opciones: fila.opciones ? [...fila.opciones, '', '', '', ''].slice(0, 4) : ['', '', '', ''],
     indice_correcto: fila.indice_correcto ?? 0,
   });
-  const [estado, setEstado] = useState(normalizar);
   const claveFila = JSON.stringify([fila.id, fila.pregunta, fila.opciones, fila.indice_correcto]);
-  useEffect(() => {
+  const [estado, setEstado] = useState(normalizar);
+  const [claveEstado, setClaveEstado] = useState(claveFila);
+  if (claveEstado !== claveFila) {
+    setClaveEstado(claveFila);
     setEstado(normalizar());
-  }, [claveFila]); 
+  }
 
   const consolidada = consolidarTrivia(estado);
   // Compara lo consolidado contra la fila original (sin el padding a 4).
@@ -532,11 +558,13 @@ function ListadoSupervivencia({ filas, guardandoId, guardar, eliminar }) {
 
 function FilaSupervivencia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
   const normalizar = () => ({ id: fila.id, pregunta: fila.pregunta || '', es_verdadera: fila.es_verdadera ?? true });
-  const [estado, setEstado] = useState(normalizar);
   const claveFila = JSON.stringify([fila.id, fila.pregunta, fila.es_verdadera]);
-  useEffect(() => {
+  const [estado, setEstado] = useState(normalizar);
+  const [claveEstado, setClaveEstado] = useState(claveFila);
+  if (claveEstado !== claveFila) {
+    setClaveEstado(claveFila);
     setEstado(normalizar());
-  }, [claveFila]);
+  }
 
   const modificado = nuevo || claveFila !== JSON.stringify([estado.id, estado.pregunta, estado.es_verdadera]);
   return (

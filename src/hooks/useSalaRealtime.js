@@ -194,7 +194,11 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     if (!idSala) return;
 
     ultimoEventoRef.current = Date.now();
-    recargar();
+    // IIFE async: la carga inicial setea estado recién después del await
+    // (evita el setState sincrónico que marca react/set-state-in-effect).
+    (async () => {
+      await recargar();
+    })();
 
     // Sin `filter` de postgres_changes: la entrega filtrada de Realtime es
     // intermitente (entrega 1 evento y enmudece). Filtramos en el cliente y

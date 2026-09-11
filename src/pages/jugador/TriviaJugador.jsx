@@ -32,13 +32,22 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
   const [velo, setVelo] = useState(null); // { tipo, clave }
   const [sacudir, setSacudir] = useState(false);
   const sacudidoRef = useRef(null);
+  // Clave incremental para reiniciar el velo (evita Date.now durante render,
+  // que la regla de pureza marca como impuro).
+  const veloClaveRef = useRef(0);
 
   // Pregunta activa (mismo enunciado para todos; fija en la sala).
-  useEffect(() => {
+  // El reseteo ocurre en render al cambiar la pregunta (patrón React
+  // "adjusting state during render"); el efecto solo trae el enunciado.
+  const [preguntaPrevia, setPreguntaPrevia] = useState(idPregunta);
+  if (preguntaPrevia !== idPregunta) {
+    setPreguntaPrevia(idPregunta);
     setPregunta(null);
     setRespondida(null);
     setIndiceCorrecto(null);
-    if (!idPregunta) return;
+  }
+  useEffect(() => {
+    if (!idPregunta) return undefined;
     let vigente = true;
     consultas
       .preguntaTriviaPorId(idPregunta)
@@ -78,10 +87,10 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
   });
 
   async function responder(opcion) {
-    if (respondida || enviando || congelada || msRestantes <= 0) return;
+    if (respondida || enviando || congelada || msRestantes <= 0 || !idPregunta) return;
     setEnviando(true);
     try {
-      const resultado = await api.triviaResponder(opcion);
+      const resultado = await api.triviaResponder(opcion, idPregunta);
       setRespondida({ ...resultado, elegida: opcion });
       if (resultado.correcta) {
         sonarAcierto();
@@ -91,7 +100,7 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
         sonarFallo();
         vibrarFallo();
       }
-      setVelo({ tipo: resultado.correcta ? 'acierto' : 'fallo', clave: Date.now() });
+      setVelo({ tipo: resultado.correcta ? 'acierto' : 'fallo', clave: ++veloClaveRef.current });
 
       enviar('trivia_resp', {
         jugador: sesion.idJugador,

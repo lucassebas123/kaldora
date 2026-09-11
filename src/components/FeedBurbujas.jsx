@@ -1,38 +1,9 @@
 // src/components/FeedBurbujas.jsx
 //
-// Burbujas en vivo para el panel del anfitrión: cada respuesta/palabra que
-// llega por broadcast aparece como burbuja flotante en el borde inferior
-// derecho y se apaga sola (2.6 s). Hook `useFeedBurbujas` + componente de
-// render. Cero escrituras: puro broadcast que ya viaja en el canal de la sala.
+// Render de las burbujas en vivo de los paneles del anfitrión. El estado lo
+// maneja el hook `useFeedBurbujas` (src/hooks/useFeedBurbujas.js).
 
-import React, { useCallback, useEffect, useState } from 'react';
-
-const VIDA_MS = 2600;
-const MAX_BURBUJAS = 7;
-
-export function useFeedBurbujas() {
-  const [burbujas, setBurbujas] = useState([]);
-
-  useEffect(() => {
-    const intervalo = setInterval(() => {
-      const ahora = Date.now();
-      setBurbujas((actuales) =>
-        actuales.some((b) => ahora - b.nace > VIDA_MS)
-          ? actuales.filter((b) => ahora - b.nace <= VIDA_MS)
-          : actuales
-      );
-    }, 500);
-    return () => clearInterval(intervalo);
-  }, []);
-
-  const push = useCallback((burbuja) => {
-    setBurbujas((prev) =>
-      [...prev, { ...burbuja, clave: Date.now() + Math.random(), nace: Date.now() }].slice(-MAX_BURBUJAS)
-    );
-  }, []);
-
-  return { burbujas, push };
-}
+import React from 'react';
 
 /**
  * @param {Array} burbujas - [{ clave, texto, nota, bien }]

@@ -28,28 +28,30 @@ import TriviaJugador from './jugador/TriviaJugador';
 import BastaJugador from './jugador/BastaJugador';
 import SupervivenciaJugador from './jugador/SupervivenciaJugador';
 
+// Restaura la sesión del jugador para un código de sala. Valida la FORMA (no
+// solo el JSON): una sesión vieja/incompleta dejaría el hook sin idSala y la
+// pantalla en spinner infinito.
+function sesionValida(codigo) {
+  const s = leerSesionJugador();
+  return s && s.codigo === codigo && s.idSala && s.token && s.idJugador && s.nickname ? s : null;
+}
+
 export default function SalaJugador() {
   const { codigo } = useParams();
   const navigate = useNavigate();
-  const [sesion, setSesion] = useState(null);
-  const [verificando, setVerificando] = useState(true);
+  const [codigoPrevio, setCodigoPrevio] = useState(codigo);
+  const [sesion, setSesion] = useState(() => sesionValida(codigo));
+  if (codigoPrevio !== codigo) {
+    setCodigoPrevio(codigo);
+    setSesion(sesionValida(codigo));
+  }
 
-  // Restauración de sesión por código de sala. Valida la FORMA (no solo el
-  // JSON): una sesión vieja/incompleta dejaría el hook sin idSala y la
-  // pantalla en spinner infinito.
+  // Sin sesión válida para esta sala: volver al portal con el PIN.
   useEffect(() => {
-    const s = leerSesionJugador();
-    const completa = s && s.codigo === codigo && s.idSala && s.token && s.idJugador && s.nickname;
-    if (completa) {
-      setSesion(s);
-    } else {
-      // Sin sesión válida para esta sala: volver al portal con el PIN.
-      borrarSesionJugador();
-      navigate(`/?sala=${codigo}`, { replace: true });
-      return;
-    }
-    setVerificando(false);
-  }, [codigo, navigate]);
+    if (sesion) return;
+    borrarSesionJugador();
+    navigate(`/?sala=${codigo}`, { replace: true });
+  }, [sesion, codigo, navigate]);
 
   const { sala, jugadores, online, listo, verificada, error, offsetReloj, escuchar, enviar, recargar } =
     useSalaRealtime(sesion?.idSala, { sesionJugador: sesion, esAnfitrion: false });
@@ -88,7 +90,7 @@ export default function SalaJugador() {
     navigate('/', { replace: true });
   }
 
-  if (verificando || !listo || !verificada) {
+  if (!sesion || !listo || !verificada) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-[#0B0616] text-[#B8AFD9]">
         <Loader2 className="animate-spin mr-3" />

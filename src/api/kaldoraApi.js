@@ -159,8 +159,14 @@ export const api = {
   // ---- Trivia ----
   triviaSiguiente: (idSala, duracionMs) =>
     rpc('trivia_siguiente', { p_sala: idSala, p_duracion_ms: duracionMs }),
-  triviaResponder: (opcion) =>
-    rpc('trivia_responder', { p_token: tokenJugador(), p_opcion: opcion }),
+  triviaResponder: (opcion, idPregunta) =>
+    rpc('trivia_responder', {
+      p_token: tokenJugador(),
+      p_opcion: opcion,
+      // V5: la respuesta viaja atada a la pregunta que el jugador vio; el
+      // servidor la rechaza si el anfitrión ya rotó la pregunta.
+      p_pregunta_id: idPregunta,
+    }),
 
   // ---- Basta ----
   bastaIniciarRonda: (idSala) => rpc('basta_iniciar_ronda', { p_sala: idSala }),

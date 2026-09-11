@@ -31,6 +31,13 @@ import { api, consultas, leerSesionJugador } from '../api/kaldoraApi';
 import { NOMBRES_ICONOS, COLORES_DISPONIBLES } from '../constants/avatares';
 import { JUEGOS } from '../game/constantes';
 
+// Sesión guardada que corresponde al PIN tipeado (o a cualquiera si el PIN
+// está vacío): el portal ofrece "volver a tu sala" sin re-registrarse.
+function sesionParaPin(pin) {
+  const sesion = leerSesionJugador();
+  return sesion && (!pin || sesion.codigo === pin) ? sesion : null;
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -43,7 +50,7 @@ export default function Landing() {
   const [form, setForm] = useState({ nombre: '', apellido: '', telefono: '', correo: '' });
   const [error, setError] = useState(null);
   const [entrando, setEntrando] = useState(false);
-  const [sesionCoincidente, setSesionCoincidente] = useState(null);
+  const [sesionCoincidente, setSesionCoincidente] = useState(() => sesionParaPin(pinDesdeUrl));
   const [perfilReconocido, setPerfilReconocido] = useState(null);
   // PIN de jugador recién generado: se muestra en el modal para copiar.
   const [pinModal, setPinModal] = useState(null);
@@ -57,9 +64,19 @@ export default function Landing() {
   // Limpia el timer del "¡Copiado!" si el componente se desmonta.
   useEffect(() => () => clearTimeout(copiadoTimerRef.current), []);
 
-  useEffect(() => {
+  // Si la URL trae un PIN (p. ej. volver de una sala), se refleja en el input.
+  const [pinDesdeUrlPrevio, setPinDesdeUrlPrevio] = useState(pinDesdeUrl);
+  if (pinDesdeUrlPrevio !== pinDesdeUrl) {
+    setPinDesdeUrlPrevio(pinDesdeUrl);
     if (pinDesdeUrl) setPin(pinDesdeUrl);
-  }, [pinDesdeUrl]);
+  }
+
+  // Sesión coincidente con el PIN: se recalcula en render al cambiar el PIN.
+  const [pinObservado, setPinObservado] = useState(pin);
+  if (pinObservado !== pin) {
+    setPinObservado(pin);
+    setSesionCoincidente(sesionParaPin(pin));
+  }
 
   useEffect(() => {
     if (modoLogin) identRef.current?.focus();
@@ -67,23 +84,15 @@ export default function Landing() {
     else pinRef.current?.focus();
   }, [modoLogin, pinDesdeUrl]);
 
-  useEffect(() => {
-    const sesion = leerSesionJugador();
-    if (sesion && (!pin || sesion.codigo === pin)) setSesionCoincidente(sesion);
-    else setSesionCoincidente(null);
-  }, [pin]);
-
   // ¿Ya jugaste con este correo? Recuperamos tus datos: solo te identificás.
+  // El perfil se muestra derivado (solo en registro y con correo válido), así
+  // el efecto no necesita limpiar estado sincrónicamente.
+  const correoValido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.correo.trim());
+  const perfilVisible = !modoLogin && correoValido ? perfilReconocido : null;
   useEffect(() => {
-    if (modoLogin) {
-      setPerfilReconocido(null);
-      return undefined;
-    }
+    if (modoLogin) return undefined;
     const correo = form.correo.trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) {
-      setPerfilReconocido(null);
-      return undefined;
-    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) return undefined;
     // `vigente` cancela tanto el debounce como una respuesta en vuelo: si el
     // correo cambió, la respuesta vieja no pisa los datos actuales.
     let vigente = true;
@@ -348,13 +357,13 @@ export default function Landing() {
                     onChange={(v) => setForm((f) => ({ ...f, correo: v }))}
                   />
                 </div>
-                {perfilReconocido && (
+                {perfilVisible && (
                   <p className="mt-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[11px] font-bold text-emerald-200">
-                    ¡Bienvenido de nuevo, {perfilReconocido.nombre}! Ya te conocemos — confirmá tus
+                    ¡Bienvenido de nuevo, {perfilVisible.nombre}! Ya te conocemos — confirmá tus
                     datos y a jugar.
                   </p>
                 )}
-                {!perfilReconocido && (
+                {!perfilVisible && (
                   <p className="mt-2.5 text-[10px] leading-relaxed text-[#6C6193]">
                     Tus datos son privados: solo los ve el anfitrión para premios y contacto. Nunca
                     aparecen en pantalla.
