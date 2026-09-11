@@ -260,7 +260,7 @@ export default function RoscoJugador({ sala, sesion, jugadorPropio, offsetReloj,
         <div
           className={`rounded-2xl px-4 py-3 text-center font-extrabold animate-pop ${
             flash.tipo === 'acierto'
-              ? 'bg-green-500/15 border border-green-400/40 text-green-300'
+              ? 'bg-green-500/15 border border-green-400/40 text-green-300 animate-destello'
               : flash.tipo === 'pasa'
                 ? 'bg-yellow-500/15 border border-yellow-400/40 text-yellow-300'
                 : 'bg-red-500/15 border border-red-400/40 text-red-300'

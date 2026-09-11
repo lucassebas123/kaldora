@@ -137,7 +137,7 @@ export default function SupervivenciaJugador({
     return (
       <div className="flex flex-col gap-4 flex-1 relative">
         <div className="pointer-events-none fixed inset-0 z-30 bg-red-600/10 animate-pulso-rojo" />
-        <div className="rounded-2xl border border-red-500/50 bg-red-500/15 p-5 text-center animate-pop">
+        <div className="rounded-2xl border border-red-500/50 bg-red-500/15 p-5 text-center animate-zoom-eliminado">
           <Skull className="mx-auto text-red-400 mb-2" size={34} />
           <p className="text-lg font-black text-red-300">ELIMINADO</p>
           <p className="text-xs text-red-200/80 mt-1">
@@ -243,7 +243,7 @@ export default function SupervivenciaJugador({
         <div
           className={`rounded-2xl px-4 py-3 text-center font-extrabold animate-pop ${
             respuestaEnviada.correcta
-              ? 'bg-green-500/15 border border-green-400/40 text-green-300'
+              ? 'bg-green-500/15 border border-green-400/40 text-green-300 animate-destello'
               : 'bg-red-500/20 border border-red-400/50 text-red-300'
           }`}
         >

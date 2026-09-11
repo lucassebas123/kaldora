@@ -117,6 +117,74 @@
 }
 .animate-burbuja-entra { animation: burbuja-entra 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
 
+/* =============================================================================
+   FESTEJO — celebración de podio y feedback festivo
+   ============================================================================= */
+
+/* Foco giratorio detrás del ganador. */
+@keyframes girar-lento {
+  to { transform: rotate(360deg); }
+}
+.animate-girar-lento { animation: girar-lento 18s linear infinite; }
+
+/* Latido de celebración (título del podio). */
+@keyframes latido {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.animate-latido { animation: latido 1.6s ease-in-out infinite; }
+
+/* Confeti DOM de respaldo (si no hay canvas 2D). */
+@keyframes confeti-cae {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translateY(125vh) rotate(720deg); opacity: 0.85; }
+}
+.animate-confeti-cae { animation: confeti-cae 3.2s linear both; }
+
+/* Destello de acierto (borde verde que se expande y apaga). */
+@keyframes destello {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+  100% { box-shadow: 0 0 0 18px rgba(74, 222, 128, 0); }
+}
+.animate-destello { animation: destello 0.7s ease-out; }
+
+/* Letra activa del rosco: pulso dorado. */
+@keyframes pulso-letra {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(242, 183, 5, 0.5)); }
+  50% { transform: scale(1.12); filter: drop-shadow(0 0 18px rgba(242, 183, 5, 0.85)); }
+}
+.animate-pulso-letra { animation: pulso-letra 1.1s ease-in-out infinite; }
+
+/* Reveal de opciones de trivia (flip). */
+@keyframes girar-opcion {
+  0% { transform: rotateX(-90deg); opacity: 0; }
+  100% { transform: rotateX(0deg); opacity: 1; }
+}
+.animate-girar-opcion {
+  animation: girar-opcion 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+  transform-origin: center;
+}
+
+/* Barrido de luz para bordes de ganador. */
+@keyframes barrido-luz {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-barrido-luz {
+  background-size: 200% 100%;
+  animation: barrido-luz 2.6s linear infinite;
+}
+
+/* Eliminación de Supervivencia: zoom dramático de la calavera. */
+@keyframes zoom-eliminado {
+  0% { transform: scale(0.35) rotate(-4deg); opacity: 0; }
+  45% { transform: scale(1.18) rotate(2deg); opacity: 1; }
+  70% { transform: scale(0.96) rotate(0deg); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-zoom-eliminado { animation: zoom-eliminado 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.1) both; }
+
 /* Skeleton shimmer (cargas de pregunta/ranking). */
 @keyframes shimmer {
   0% { background-position: -480px 0; }
@@ -145,5 +213,7 @@
   .animate-blob, .animate-degradado, .animate-float, .animate-pop,
   .animate-pulso-reloj, .animate-tic, .animate-flotar-arriba, .animate-flash-velo,
   .animate-pulso-rojo, .animate-sacudir, .animate-entrada-vista, .animate-burbuja-entra,
+  .animate-girar-lento, .animate-latido, .animate-confeti-cae, .animate-destello,
+  .animate-pulso-letra, .animate-girar-opcion, .animate-barrido-luz, .animate-zoom-eliminado,
   .skeleton { animation: none; }
 }

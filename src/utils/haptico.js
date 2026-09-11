@@ -22,3 +22,4 @@ export const vibrarPasapalabra = () => vibrar(18);
 export const vibrarUrgencia = () => vibrar([50, 70, 50, 70, 50]);
 export const vibrarEliminado = () => vibrar([140, 60, 140, 60, 260]);
 export const vibrarCelebracion = () => vibrar([30, 55, 30, 55, 100]);
+export const vibrarVictoria = () => vibrar([45, 65, 45, 65, 60, 65, 180]);

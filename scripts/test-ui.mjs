@@ -170,6 +170,21 @@ await pagHost.getByRole('button', { name: 'Terminar' }).click();
 const podio = await pagJugador.locator('body').getByText(/Podio final|Partida finalizada|GANASTE/).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
 verificar('podio en el celular del jugador', podio);
 
+// El confeti del podio (canvas-confetti) crea un canvas fixed con
+// pointer-events:none. Fase 0: verificar que realmente se dispara.
+const confeti = await pagJugador
+  .waitForFunction(
+    () => [...document.querySelectorAll('canvas')].some((c) => c.style.position === 'fixed' && c.style.pointerEvents === 'none'),
+    null,
+    { timeout: 6000 }
+  )
+  .then(() => true)
+  .catch(() => false);
+verificar('confeti del podio: canvas activo tras terminar', confeti);
+if (!confeti) {
+  console.log('    [debug confeti] canvas en el DOM:', await pagJugador.evaluate(() => document.querySelectorAll('canvas').length));
+}
+
 // -----------------------------------------------------------------------------
 console.log('\n═══ 4b. Aceptar invitación ═══');
 const ctxInvitado = await browser.newContext({ viewport: { width: 390, height: 844 } });

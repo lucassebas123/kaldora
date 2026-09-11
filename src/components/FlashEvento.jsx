@@ -7,9 +7,9 @@
 import React from 'react';
 
 const VELO = {
-  acierto: 'bg-green-500/25',
-  fallo: 'bg-red-500/25',
-  alerta: 'bg-amber-500/25',
+  acierto: 'bg-[radial-gradient(ellipse_at_center,rgba(74,222,128,0.4)_0%,rgba(74,222,128,0)_70%)]',
+  fallo: 'bg-[radial-gradient(ellipse_at_center,rgba(248,113,113,0.45)_0%,rgba(248,113,113,0)_70%)]',
+  alerta: 'bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.4)_0%,rgba(251,191,36,0)_70%)]',
 };
 
 export default function FlashEvento({ tipo, clave, duracionMs = 550 }) {

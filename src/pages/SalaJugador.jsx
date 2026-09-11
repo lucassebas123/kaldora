@@ -14,7 +14,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, WifiOff, Users, Sparkles } from 'lucide-react';
+import { Loader2, WifiOff, Sparkles } from 'lucide-react';
 import FondoAnimado from '../components/FondoAnimado';
 import BotonMusica from '../components/BotonMusica';
 import HeaderJugador from '../components/HeaderJugador';
@@ -27,6 +27,7 @@ import RoscoJugador from './jugador/RoscoJugador';
 import TriviaJugador from './jugador/TriviaJugador';
 import BastaJugador from './jugador/BastaJugador';
 import SupervivenciaJugador from './jugador/SupervivenciaJugador';
+import EsperaJugador from './jugador/EsperaJugador';
 
 // Restaura la sesión del jugador para un código de sala. Valida la FORMA (no
 // solo el JSON): una sesión vieja/incompleta dejaría el hook sin idSala y la
@@ -146,6 +147,7 @@ export default function SalaJugador() {
         jugadores={jugadores}
         online={online}
         sesion={sesion}
+        jugadorPropio={jugadorPropio}
         juegoActual={sala.juego_actual}
       />
     );
@@ -214,61 +216,4 @@ function temaMusica(sala) {
   if (sala.estado === 'finalizado') return 'podio';
   if (sala.estado === 'en_espera') return 'sala';
   return sala.juego_actual || 'sala';
-}
-
-// ---------------------------------------------------------------------------
-// Sala de espera viva
-// ---------------------------------------------------------------------------
-function EsperaJugador({ jugadores, online, sesion, juegoActual }) {
-  const juego = juegoActual ? JUEGOS[juegoActual] : null;
-
-  return (
-    <div className="flex flex-col gap-5 flex-1">
-      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center">
-        <p className="text-4xl mb-3 animate-float">🎮</p>
-        <h1 className="text-lg font-extrabold">¡Estás dentro, {sesion.nickname}!</h1>
-        <p className="text-sm text-[#B8AFD9] mt-1">
-          Esperá a que el anfitrión arranque. Dejá esta pantalla abierta.
-        </p>
-
-        {juego && (
-          <div className="mt-4 rounded-2xl border border-fuchsia-400/30 bg-fuchsia-400/10 px-4 py-3 animate-pop">
-            <p className="text-[10px] uppercase tracking-widest text-fuchsia-300 font-bold">
-              Se viene
-            </p>
-            <p className="text-base font-extrabold text-white mt-0.5">
-              {juego.emoji} {juego.nombre}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <section>
-        <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8B80B3] mb-2">
-          <Users size={14} />
-          Jugadores en la sala ({jugadores.length})
-        </h2>
-        <div className="grid grid-cols-2 gap-2">
-          {jugadores.map((j) => (
-            <div
-              key={j.id}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${
-                j.id === sesion.idJugador
-                  ? 'border-fuchsia-400/40 bg-fuchsia-400/10'
-                  : 'border-white/10 bg-white/[0.04]'
-              }`}
-            >
-              <span
-                title={online.has(j.id) ? 'Conectado' : 'Desconectado'}
-                className={`h-2 w-2 rounded-full shrink-0 ${
-                  online.has(j.id) ? 'bg-green-400' : 'bg-red-500/60'
-                }`}
-              />
-              <span className="text-sm font-semibold truncate">{j.nickname}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
 }

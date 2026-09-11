@@ -94,6 +94,15 @@ export function sonarAlarma() {
   tocarNota(1100, 1100, 0.5, { tipo: 'square', volumen: 0.22, retardo: 0.56 });
 }
 
+/** Victoria (podio): fanfarria Do-Mi-Sol-Do con destello final. */
+export function sonarVictoria() {
+  tocarNota(523.25, 523.25, 0.14, { tipo: 'triangle', volumen: 0.3 });
+  tocarNota(659.25, 659.25, 0.14, { tipo: 'triangle', volumen: 0.3, retardo: 0.12 });
+  tocarNota(783.99, 783.99, 0.14, { tipo: 'triangle', volumen: 0.3, retardo: 0.24 });
+  tocarNota(1046.5, 1046.5, 0.5, { tipo: 'triangle', volumen: 0.34, retardo: 0.36 });
+  tocarNota(1318.51, 1567.98, 0.55, { tipo: 'sine', volumen: 0.12, retardo: 0.44 });
+}
+
 /** Desbloquea el contexto de audio (debe llamarse dentro de un gesto del usuario). */
 export function inicializarAudio() {
   obtenerContexto();

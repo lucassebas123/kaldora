@@ -30,6 +30,7 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
   const [enviando, setEnviando] = useState(false);
   const [indiceCorrecto, setIndiceCorrecto] = useState(null); // revelado por el host
   const [velo, setVelo] = useState(null); // { tipo, clave }
+  const [combo, setCombo] = useState(null); // multiplicador de racha (x2/x3)
   const [sacudir, setSacudir] = useState(false);
   const sacudidoRef = useRef(null);
   // Clave incremental para reiniciar el velo (evita Date.now durante render,
@@ -86,6 +87,13 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
     setIndiceCorrecto((prev) => (prev === null ? indice : prev));
   });
 
+  // El cartel de racha se apaga solo.
+  useEffect(() => {
+    if (!combo) return undefined;
+    const t = setTimeout(() => setCombo(null), 1500);
+    return () => clearTimeout(t);
+  }, [combo]);
+
   async function responder(opcion) {
     if (respondida || enviando || congelada || msRestantes <= 0 || !idPregunta) return;
     setEnviando(true);
@@ -95,7 +103,10 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
       if (resultado.correcta) {
         sonarAcierto();
         vibrarExito();
-        if (resultado.multiplicador > 1) confetiRafaga();
+        if (resultado.multiplicador > 1) {
+          setCombo(resultado.multiplicador);
+          confetiRafaga();
+        }
       } else {
         sonarFallo();
         vibrarFallo();
@@ -124,11 +135,26 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
   return (
     <div className={`flex flex-col gap-4 flex-1 ${sacudir ? 'animate-sacudir' : ''}`}>
       <FlashEvento tipo={velo?.tipo} clave={velo?.clave} />
+      {combo > 1 && (
+        <div className="pointer-events-none fixed left-1/2 top-1/4 z-30 -translate-x-1/2 animate-pop">
+          <span className="rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 px-6 py-2 text-3xl font-black text-[#1B1035] shadow-2xl shadow-orange-500/50">
+            ¡RACHA x{combo}!
+          </span>
+        </div>
+      )}
       {/* Barra de tiempo */}
       <div className="flex items-center gap-3">
         <span
           className={`text-2xl font-black tabular-nums w-16 font-display ${
-            tiempoAgotado ? 'text-red-400' : msRestantes < 5000 ? 'text-orange-300 animate-pulso-reloj' : 'text-sky-300'
+            tiempoAgotado
+              ? 'text-red-400'
+              : msRestantes < 3000
+                ? 'text-red-400 animate-pulso-reloj'
+                : msRestantes < 7000
+                  ? 'text-orange-300 animate-pulso-reloj'
+                  : msRestantes < 12000
+                    ? 'text-amber-300'
+                    : 'text-sky-300'
           }`}
         >
           <span
@@ -141,7 +167,11 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
         <div className="flex-1 h-3 rounded-full bg-white/10 overflow-hidden">
           <div
             className={`h-full rounded-full transition-none ${
-              msRestantes < 5000 ? 'bg-orange-400' : 'bg-gradient-to-r from-sky-400 to-cyan-400'
+              tiempoAgotado || msRestantes < 3000
+                ? 'bg-red-400'
+                : msRestantes < 7000
+                  ? 'bg-orange-400'
+                  : 'bg-gradient-to-r from-sky-400 to-cyan-400'
             }`}
             style={{ width: `${progreso * 100}%` }}
           />
@@ -171,9 +201,10 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
               type="button"
               onClick={() => responder(i)}
               disabled={Boolean(respondida) || enviando || tiempoAgotado || congelada || !pregunta}
+              style={revelada ? { animationDelay: `${i * 60}ms` } : undefined}
               className={`relative flex items-center gap-3 rounded-2xl border px-4 py-4 text-left font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed ${
                 revelada
-                  ? 'border-green-400/60 bg-green-400/15 text-green-200'
+                  ? 'border-green-400/60 bg-green-400/15 text-green-200 animate-girar-opcion'
                   : esMiEleccion && respondida?.correcta === false
                     ? 'border-red-400/60 bg-red-400/15 text-red-200'
                     : esMiEleccion
@@ -195,7 +226,7 @@ export default function TriviaJugador({ sala, sesion, offsetReloj, escuchar, env
         <div
           className={`rounded-2xl px-4 py-3 text-center font-extrabold animate-pop ${
             respondida.correcta
-              ? 'bg-green-500/15 border border-green-400/40 text-green-300'
+              ? 'bg-green-500/15 border border-green-400/40 text-green-300 animate-destello'
               : 'bg-red-500/15 border border-red-400/40 text-red-300'
           }`}
         >

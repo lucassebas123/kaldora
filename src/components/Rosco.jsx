@@ -145,7 +145,8 @@ export default function Rosco({ estados = {}, letraActual = null, tamano = 420 }
           fontSize={tamano * 0.14}
           fontWeight={800}
           fill="#F2B705"
-          className="font-display"
+          className="font-display animate-pulso-letra"
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
         >
           {letraActual}
         </text>

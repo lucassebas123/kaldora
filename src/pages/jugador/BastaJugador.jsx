@@ -176,13 +176,14 @@ export default function BastaJugador({
         </div>
 
         <div className="flex flex-col gap-2">
-          {categorias.map((cat) => {
+          {categorias.map((cat, i) => {
             const fila = (resultado || []).find((r) => r.id_categoria === cat.id);
             const texto = fila?.texto?.trim() || '—';
             return (
               <div
                 key={cat.id}
-                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5"
+                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 animate-pop"
+                style={{ animationDelay: `${i * 60}ms` }}
               >
                 <span className="text-xs font-bold text-[#8B80B3] w-28 shrink-0 truncate">{cat.nombre}</span>
                 <span className="flex-1 text-sm font-semibold truncate">{texto}</span>
@@ -289,8 +290,8 @@ export default function BastaJugador({
 
       {/* Inputs por categoría */}
       <div className="flex flex-col gap-2">
-        {categorias.map((cat) => (
-          <div key={cat.id} className="relative">
+        {categorias.map((cat, i) => (
+          <div key={cat.id} className="relative animate-pop" style={{ animationDelay: `${i * 55}ms` }}>
             <input
               value={palabras[cat.id] || ''}
               onChange={(e) => setPalabras((p) => ({ ...p, [cat.id]: e.target.value.slice(0, 40) }))}

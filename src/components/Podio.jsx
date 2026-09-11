@@ -1,14 +1,17 @@
 // src/components/Podio.jsx
 //
 // Vista de partida finalizada para jugador y anfitrión: podio escalonado
-// (3º → 2º → 1º, con confeti por escalón) + ranking completo + estado de
-// espera a la revancha. El confeti corre UNA vez por montaje de la vista
-// (antes se reiniciaba con cada snapshot del polling: lluvia infinita).
+// (3º → 2º → 1º) + ranking completo + espera de revancha. La celebración
+// (confeti en capas, fanfarria y vibración) corre UNA vez por montaje de la
+// vista (antes se reiniciaba con cada snapshot del polling: lluvia infinita).
 
 import React, { useEffect, useRef, useState } from 'react';
-import confetti from 'canvas-confetti';
 import RankingJugadores from './RankingJugadores';
 import AvatarChip from './AvatarChip';
+import ConfetiCSS from './ConfetiCSS';
+import { celebracionPodio, confetiGoteo } from '../utils/confeti';
+import { sonarVictoria } from '../utils/sonidos';
+import { vibrarVictoria } from '../utils/haptico';
 
 const PODIO_ALTURAS = ['h-24', 'h-16', 'h-12']; // 1º, 2º, 3º
 const PODIO_TONOS = [
@@ -25,9 +28,7 @@ export default function Podio({
   mensaje = '¡Partida finalizada!',
   titulo = 'Podio final',
 }) {
-  // Confeti celebratorio (más denso si el propio jugador ganó). Una sola
-  // corrida: el montaje del podio marca el momento, no cada snapshot.
-  const gane = idJugadorPropio && jugadores[0]?.id === idJugadorPropio;
+  const gane = Boolean(idJugadorPropio && jugadores[0]?.id === idJugadorPropio);
   const ganeRef = useRef(gane);
   useEffect(() => {
     ganeRef.current = gane;
@@ -35,34 +36,20 @@ export default function Podio({
   const [mostrados, setMostrados] = useState(0); // 0..3 escalones revelados
 
   useEffect(() => {
-    const lluvia = setInterval(() => {
-      confetti({
-        particleCount: ganeRef.current ? 110 : 70,
-        spread: 80,
-        startVelocity: 38,
-        origin: { x: Math.random(), y: 0.1 + Math.random() * 0.3 },
-        zIndex: 9999,
-      });
-    }, ganeRef.current ? 200 : 280);
-    const fin = setTimeout(() => clearInterval(lluvia), ganeRef.current ? 4200 : 2600);
+    // Celebración: secuencia en capas + goteo para quien mira tarde.
+    const pararCelebracion = celebracionPodio({ gano: Boolean(ganeRef.current) });
+    const pararGoteo = confetiGoteo({ duracionMs: 14000 });
+    sonarVictoria();
+    vibrarVictoria();
 
-    // Escalones escalonados: 3º, 2º y por último 1º con su ráfaga.
+    // Escalones escalonados: 3º, 2º y por último 1º (corona incluida).
     const t1 = setTimeout(() => setMostrados(1), 350);
     const t2 = setTimeout(() => setMostrados(2), 1150);
-    const t3 = setTimeout(() => {
-      setMostrados(3);
-      confetti({
-        particleCount: 120,
-        spread: 100,
-        startVelocity: 46,
-      origin: { x: 0.5, y: 0.45 },
-      zIndex: 9999,
-    });
-    }, 2100);
+    const t3 = setTimeout(() => setMostrados(3), 2100);
 
     return () => {
-      clearInterval(lluvia);
-      clearTimeout(fin);
+      pararCelebracion();
+      pararGoteo();
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
@@ -78,12 +65,28 @@ export default function Podio({
   const hayPodio = escalones.length > 0;
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col items-center gap-6">
+    <div className="relative w-full max-w-lg mx-auto flex flex-col items-center gap-6">
+      <ConfetiCSS />
+
+      {/* Foco giratorio detrás del podio (rayos de luz del ganador). */}
+      <div className="pointer-events-none absolute -top-28 left-1/2 -z-10 h-[34rem] w-[34rem] -translate-x-1/2 opacity-40">
+        <div
+          className="animate-girar-lento h-full w-full rounded-full"
+          style={{
+            background:
+              'conic-gradient(from 0deg, transparent 0deg, rgba(242,183,5,0.4) 18deg, transparent 40deg, rgba(217,70,239,0.3) 95deg, transparent 115deg, rgba(56,189,248,0.3) 180deg, transparent 205deg, rgba(242,183,5,0.4) 260deg, transparent 285deg, rgba(217,70,239,0.3) 340deg, transparent 360deg)',
+            filter: 'blur(2px)',
+          }}
+        />
+      </div>
+
       <div className="text-center">
         <p className="text-sm font-bold uppercase tracking-[0.3em] text-[#8B80B3] font-display">{titulo}</p>
         <h1
           className={`mt-2 text-3xl sm:text-4xl font-black font-display ${
-            propioGano ? 'text-amber-300' : 'text-white'
+            propioGano
+              ? 'animate-latido bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200 bg-clip-text text-transparent'
+              : 'text-white'
           }`}
         >
           {propioGano ? '¡GANASTE! 🏆' : mensaje}
@@ -101,30 +104,35 @@ export default function Podio({
         <div className="w-full flex items-end justify-center gap-3">
           {ordenVisual.map((j, i) => {
             const puesto = ordenIdx[i];
-            // Revela 3º → 2º → 1º (el 1º cae junto con la ráfaga de t3).
+            // Revela 3º → 2º → 1º (el 1º cae junto con la corona y su brillo).
             const visible = mostrados >= 3 - puesto;
             return (
               <div key={i} className="flex flex-col items-center justify-end w-24">
                 {visible && j ? (
                   <div className="flex flex-col items-center gap-1 animate-pop mb-2">
+                    {puesto === 0 && <span className="text-2xl leading-none animate-float">👑</span>}
                     <span className="text-2xl">{PODIO_MEDALLAS[puesto]}</span>
                     <AvatarChip icono={j.icono} color={j.color} tamano="md" online={online?.has(j.id)} />
-                    <p className={`text-xs font-black truncate max-w-24 font-display ${
-                      puesto === 0 ? 'text-amber-200' : 'text-white'
-                    }`}>
+                    <p
+                      className={`text-xs font-black truncate max-w-24 font-display ${
+                        puesto === 0
+                          ? 'bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 bg-clip-text text-transparent'
+                          : 'text-white'
+                      }`}
+                    >
                       {j.nickname}
                     </p>
                     <p className="text-[10px] font-bold tabular-nums text-[#B8AFD9]">{j.puntos} pts</p>
                   </div>
                 ) : (
-                  <div className="mb-2 h-[4.25rem]" />
+                  <div className="mb-2 h-28" />
                 )}
                 <div
-                  className={`w-full rounded-t-xl border-t border-x bg-gradient-to-b ${
+                  className={`w-full origin-bottom rounded-t-xl border-t border-x bg-gradient-to-b ${
                     PODIO_TONOS[puesto]
-                  } ${PODIO_ALTURAS[puesto]} transition-opacity duration-500 ${
-                    visible ? 'opacity-100' : 'opacity-0'
-                  } flex items-start justify-center pt-1.5`}
+                  } ${PODIO_ALTURAS[puesto]} transition-all duration-700 ${
+                    visible ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0'
+                  } ${puesto === 0 ? 'shadow-[0_0_45px_rgba(242,183,5,0.4)]' : ''} flex items-start justify-center pt-1.5`}
                 >
                   <span className="text-sm font-black font-display">{puesto + 1}</span>
                 </div>

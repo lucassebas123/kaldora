@@ -224,8 +224,10 @@ src/
 │   ├── Landing.jsx               # Portal público: registro (con PIN de
 │   │                             #   jugador copiable) + login multicanal
 │   ├── SalaJugador.jsx           # HUB: muta a la vista del juego activo
-│   ├── jugador/                  # RoscoJugador, TriviaJugador, BastaJugador,
-│   │                             #   SupervivenciaJugador (+ espectador rojo)
+│   ├── jugador/                  # EsperaJugador (PIN, reglas y tips),
+│   │                             #   RoscoJugador, TriviaJugador,
+│   │                             #   BastaJugador, SupervivenciaJugador
+│   │                             #   (+ espectador rojo)
 │   └── admin/
 │       ├── AdminLogin.jsx        # Login (Supabase Auth)
 │       ├── AceptarInvitacion.jsx # Link del mail de invitación: define
@@ -237,7 +239,9 @@ src/
 │       └── paneles/              # PanelRosco, PanelTrivia, PanelBasta,
 │                                 #   PanelSupervivencia (proyección + moderación)
 ├── components/                   # FondoAnimado (canvas), Rosco (SVG circular),
-│                                 #   Podio, RankingJugadores, AnilloProgreso,
+│                                 #   Podio (celebración en capas + fanfarria),
+│                                 #   ConfetiCSS (fallback sin canvas),
+│                                 #   RankingJugadores, AnilloProgreso,
 │                                 #   AvatarChip, HeaderJugador, BotonMusica,
 │                                 #   AvisoActualizacion (detecta pestaña con
 │                                 #   bundle viejo y ofrece recargar)
@@ -245,7 +249,9 @@ src/
     ├── musica.js                 # Música ambiente sintetizada (Web Audio),
     │                             #   un loop por contexto, mute persistente
     ├── sonidos.js                # SFX sintetizados: acierto, fallo,
-    │                             #   pasapalabra, tic-tac, alarma
+    │                             #   pasapalabra, tic-tac, alarma, victoria
+    ├── confeti.js                # canvas-confetti: ráfaga, explosión, cañones,
+    │                             #   celebración de podio en capas y goteo
     ├── importador.js             # Importador universal de bancos: pega texto
     │                             #   (PDF/Word/web), CSV/TSV, JSON, SQL o texto
     │                             #   libre → previsualiza → carga vía RPC
