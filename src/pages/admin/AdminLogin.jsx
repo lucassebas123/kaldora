@@ -101,8 +101,8 @@ export default function AdminLogin() {
         <p className="mt-5 text-center text-[11px] leading-relaxed text-[#6C6193]">
           ¿Necesitás una cuenta nueva para un operador?
           <br />
-          Se crean desde el panel (sección <span className="text-[#B8AFD9]">Administradores</span>) o desde el
-          dashboard de Supabase — no hay registro público.
+          Se invita desde el panel (sección <span className="text-[#B8AFD9]">Administradores</span>): le llega un
+          mail y define su contraseña al abrirlo. No hay registro público.
         </p>
 
         <button

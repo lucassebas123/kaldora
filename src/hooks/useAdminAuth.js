@@ -60,9 +60,16 @@ export function useAdminAuth() {
     return data;
   }, []);
 
+  // Invitaciones / recuperación: define la contraseña del usuario logueado.
+  const actualizarPassword = useCallback(async (password) => {
+    const { data, error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    return data;
+  }, []);
+
   const salir = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
 
-  return { sesion, email, estado, entrar, registrar, salir };
+  return { sesion, email, estado, entrar, registrar, actualizarPassword, salir };
 }

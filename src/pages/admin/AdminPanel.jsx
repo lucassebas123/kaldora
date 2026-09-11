@@ -228,7 +228,7 @@ function SeccionAdministradores({ admins, recargar }) {
             className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-bold text-[#B8AFD9] hover:text-white hover:bg-white/10 transition"
           >
             <ExternalLink size={12} />
-            Crear cuenta de operador
+            Invitar operador
           </a>
         )}
       </div>
@@ -306,10 +306,11 @@ function SeccionAdministradores({ admins, recargar }) {
 
           {soyDueno && (
             <p className="mt-3 text-[11px] leading-relaxed text-[#6C6193]">
-              Para SUMAR un operador: tocá "Crear cuenta de operador" → en el dashboard de Supabase,
-              <span className="text-[#B8AFD9]"> Authentication → Users → Add user → Create user</span> (con su email y
-              contraseña). La cuenta entra sola a esta lista como operador. No hay registro público: nadie puede
-              crearse una cuenta desde la web.
+              Para SUMAR un operador: tocá "Invitar operador" → en el dashboard de Supabase,
+              <span className="text-[#B8AFD9]"> Authentication → Users → Add user → Invite</span>. Le llega un mail: al
+              abrir el link define su contraseña y entra solo a esta lista como operador. Alternativa sin mail:
+              <span className="text-[#B8AFD9]"> Create new user</span> con una contraseña provisoria. No hay registro
+              público: nadie puede crearse una cuenta desde la web.
             </p>
           )}
         </>

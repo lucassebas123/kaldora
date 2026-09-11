@@ -6,7 +6,8 @@
 //   3. Anfitrión: login + crear sala + lanzar CADA juego → los paneles
 //      renderizan (aquí se detecta el "pantalla en blanco")
 //   4. Jugador muta al juego lanzado (rosco, trivia, basta, supervivencia)
-//   5. Cero errores de consola tipo ReferenceError/blank screen
+//   5. Invitación sin token: /admin/invitacion muestra "link vencido" sin crash
+//   6. Cero errores de consola tipo ReferenceError/blank screen
 //
 // Uso: node scripts/test-ui.mjs
 
@@ -167,6 +168,22 @@ console.log('\n═══ 4. Podio final ═══');
 await pagHost.getByRole('button', { name: 'Terminar' }).click();
 const podio = await pagJugador.locator('body').getByText(/Podio final|Partida finalizada|GANASTE/).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
 verificar('podio en el celular del jugador', podio);
+
+// -----------------------------------------------------------------------------
+console.log('\n═══ 4b. Aceptar invitación sin token ═══');
+const ctxInvitado = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const pagInvitado = await ctxInvitado.newPage();
+pagInvitado.on('pageerror', (e) => erroresJS.push(`INVITADO: ${e.message}`));
+await pagInvitado.goto(`${BASE}/admin/invitacion`, { waitUntil: 'domcontentloaded' });
+const linkVencido = await pagInvitado
+  .getByText(/ya venció|link inválido|No encontramos una invitación/i)
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('/admin/invitacion sin token → link vencido (sin crash)', linkVencido);
+if (!linkVencido) console.log('    [debug invitación]', (await pagInvitado.locator('body').innerText()).slice(0, 250).replace(/\n/g, ' | '));
+await ctxInvitado.close();
 
 // -----------------------------------------------------------------------------
 console.log('\n═══ 5. Errores de JavaScript ═══');

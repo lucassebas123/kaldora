@@ -82,6 +82,7 @@ arquitectura, seguridad, herramientas y despliegue.
 /                    -> Landing pública (PIN gigante + nickname)
 /jugar/:codigo       -> HUB del jugador: sala de espera + mutación por juego
 /admin/login         -> Login del anfitrión (Supabase Auth)
+/admin/invitacion    -> Aceptar invitación de operador (define contraseña)
 /admin               -> Dashboard: crear/listar salas
 /admin/sala/:id      -> Centro de control: QR + PIN, selector de juego,
                         proyección + moderación por juego, podio/revancha
@@ -123,6 +124,13 @@ arquitectura, seguridad, herramientas y despliegue.
   únicos, case/dígitos-insensibles) y rota las anteriores como historial; así
   un correo tipeado mal no deja al jugador afuera (lo rescatan el celular o
   el PIN). `perfil_por_correo` sigue precargando datos en el registro.
+* **Alta de operadores**: no hay registro público. El dueño invita desde el
+  panel (`Authentication → Users → Add user → Invite`); el trigger
+  `trg_admin_automatico` registra al invitado como `operador` y el link del
+  mail aterriza en `/admin/invitacion`, donde define su contraseña
+  (`supabase.auth.updateUser`). Requiere Site URL + Redirect URLs apuntando a
+  kaldora.site en la configuración de Auth del proyecto (Authentication →
+  URL Configuration).
 
 ### 4.3 RPCs SECURITY DEFINER (toda la lógica de juego)
 
@@ -220,6 +228,8 @@ src/
 │   │                             #   SupervivenciaJugador (+ espectador rojo)
 │   └── admin/
 │       ├── AdminLogin.jsx        # Login (Supabase Auth)
+│       ├── AceptarInvitacion.jsx # Link del mail de invitación: define
+│       │                         #   contraseña y entra al panel
 │       ├── AdminPanel.jsx        # Dashboard: crear/listar/borrar salas
 │       ├── AdminSala.jsx         # Centro de control: lobby (QR+PIN) →
 │       │                         #   jugando → pausado → podio/revancha
@@ -358,8 +368,9 @@ node scripts/test-concurrencia.mjs  # ESTRÉS: 10 jugadores simultáneos por los
                                 #   de puntos y perfiles). Ver
                                 #   docs/auditoria-tecnica.md.
 node scripts/test-ui.mjs        # UI con Playwright (Chromium real): landing,
-                                #   login, lanzar cada juego, mutación del
-                                #   jugador y cero errores de consola.
+                                #   login, lanzar cada juego, invitación sin
+                                #   token (link vencido) y cero errores de
+                                #   consola.
 ```
 
 ## 11. Despliegue (Vercel)

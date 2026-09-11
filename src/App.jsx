@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 const Landing = lazy(() => import('./pages/Landing'));
 const SalaJugador = lazy(() => import('./pages/SalaJugador'));
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const AceptarInvitacion = lazy(() => import('./pages/admin/AceptarInvitacion'));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 const AdminSala = lazy(() => import('./pages/admin/AdminSala'));
 
@@ -55,6 +56,8 @@ export default function App() {
 
           {/* Administración (Supabase Auth) */}
           <Route path="/admin/login" element={<AdminLogin />} />
+          {/* Destino del mail de invitación de operadores (define contraseña) */}
+          <Route path="/admin/invitacion" element={<AceptarInvitacion />} />
           <Route
             path="/admin"
             element={
