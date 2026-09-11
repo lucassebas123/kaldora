@@ -277,7 +277,11 @@ supabase/migrations/
 ├── 20260112000000_hotfix_basta_puntaje.sql # Basta: diccionario avisa, host puntúa
 ├── 20260113000000_registro_persistente.sql # Registro de jugadores sobrevive a salas/borrados
 ├── 20260114000000_auditoria_concurrencia.sql # Locks anti race conditions (ver docs/auditoria-tecnica.md)
-└── 20260115000000_carga_masiva_v2.sql # Batch insert de una sentencia + sanitización XSS + tope 5000
+├── 20260115000000_carga_masiva_v2.sql # Batch insert de una sentencia + sanitización XSS + tope 5000
+└── 20260116000000_endurecimiento.sql  # Seguridad: banco `preguntas` fuera de Realtime,
+                                       #   grants de escritura sobre PII revocados,
+                                       #   topes anti-abuso (200 jugadores/sala,
+                                       #   50 salas/host), validación icono/color
 ```
 
 Se aplican con **Supabase CLI**: `npx supabase link --project-ref <REF>` y
