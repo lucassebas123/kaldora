@@ -1,0 +1,33 @@
+# Configuración local de Supabase CLI. Este archivo NO se usa en Vercel.
+# Local: `supabase start` (levanta Postgres + API + Realtime + Studio).
+# La app (Vite en :5173) se conecta con los valores de supabaseClient.js.
+project_id = "el-rosco"
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/**"]
+
+[realtime]
+enabled = true
+port = 54323
+
+[studio]
+enabled = true
+port = 54324
+
+[analytics]
+enabled = true
+port = 54327

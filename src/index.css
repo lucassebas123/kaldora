@@ -1,0 +1,149 @@
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================================
+   KALDORA — animaciones globales (CSS puro, sin dependencias)
+   ============================================================================= */
+
+/* Parpadeo para alertas (pausa, desconexión). */
+@keyframes rosco-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.animate-rosco-blink { animation: rosco-blink 1.1s ease-in-out infinite; }
+
+/* Orbes del fondo: deriva lenta en deriva infinita. */
+@keyframes blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.08); }
+  66% { transform: translate(-30px, 25px) scale(0.95); }
+}
+.animate-blob { animation: blob 18s ease-in-out infinite; }
+.animacion-lenta { animation-duration: 26s; }
+.animacion-retraso { animation-delay: -9s; }
+
+/* Degradado de marca que respira. */
+@keyframes degradado {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-degradado {
+  background-size: 200% 200%;
+  animation: degradado 7s ease-in-out infinite;
+}
+
+/* Flotación suave (iconos de espera). */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float { animation: float 2.6s ease-in-out infinite; }
+
+/* Pop al aparecer (feedback de puntos, banners). */
+@keyframes pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-pop { animation: pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+
+/* =============================================================================
+   JUICE — feedback vivo de Kaldora
+   ============================================================================= */
+
+/* Reloj tenso: pulso continuo en los últimos segundos. */
+@keyframes pulso-reloj {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0)); }
+  50% { transform: scale(1.1); filter: drop-shadow(0 0 14px rgba(255, 120, 120, 0.45)); }
+}
+.animate-pulso-reloj { animation: pulso-reloj 0.55s ease-in-out infinite; }
+
+/* Bump por segundo del reloj (se reinicia cambiando la key del span). */
+@keyframes tic {
+  0% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+.animate-tic { animation: tic 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+
+/* Puntos que flotan hacia arriba (+100 / -50) y se desvanecen. */
+@keyframes flotar-arriba {
+  0% { transform: translateY(8px) scale(0.8); opacity: 0; }
+  15% { transform: translateY(2px) scale(1.08); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translateY(-30px) scale(1); opacity: 0; }
+}
+.animate-flotar-arriba { animation: flotar-arriba 1.15s ease-out forwards; }
+
+/* Flash de pantalla: velo de color que aparece y se apaga. */
+@keyframes flash-velo {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+.animate-flash-velo { animation: flash-velo 0.55s ease-out forwards; }
+
+/* Velo rojo pulsante para el eliminado. */
+@keyframes pulso-rojo {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.95; }
+}
+.animate-pulso-rojo { animation: pulso-rojo 1.7s ease-in-out infinite; }
+
+/* Sacudida de pantalla (tiempo letal agotándose). */
+@keyframes sacudir {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-5px, 2px); }
+  40% { transform: translate(5px, -2px); }
+  60% { transform: translate(-4px, -1px); }
+  80% { transform: translate(4px, 1px); }
+}
+.animate-sacudir { animation: sacudir 0.4s ease-in-out; }
+
+/* Transición de entrada entre vistas. */
+@keyframes entrada-vista {
+  0% { opacity: 0; transform: translateY(16px) scale(0.985); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-entrada-vista { animation: entrada-vista 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.05); }
+
+/* Burbuja del feed en vivo del anfitrión. */
+@keyframes burbuja-entra {
+  0% { transform: translateY(12px) scale(0.88); opacity: 0; }
+  60% { transform: translateY(-2px) scale(1.04); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.animate-burbuja-entra { animation: burbuja-entra 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+
+/* Skeleton shimmer (cargas de pregunta/ranking). */
+@keyframes shimmer {
+  0% { background-position: -480px 0; }
+  100% { background-position: 480px 0; }
+}
+.skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 960px 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+
+/* Scrollbars discretos en paneles oscuros. */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 999px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Respeto por prefers-reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-blob, .animate-degradado, .animate-float, .animate-pop,
+  .animate-pulso-reloj, .animate-tic, .animate-flotar-arriba, .animate-flash-velo,
+  .animate-pulso-rojo, .animate-sacudir, .animate-entrada-vista, .animate-burbuja-entra,
+  .skeleton { animation: none; }
+}
