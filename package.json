@@ -18,6 +18,7 @@
     "test:carga": "node scripts/test-carga-3-salas.mjs 20",
     "test:caos": "node scripts/test-caos.mjs",
     "test:seguridad": "node scripts/test-seguridad.mjs",
+    "auditar:api": "node scripts/auditar-api.mjs",
     "verificar": "npm run lint && npm run test:logica && npm run test:importador && npm run test:seguridad && npm run test:caos && npm run test:e2e && npm run test:concurrencia"
   },
   "dependencies": {

@@ -413,6 +413,9 @@ node scripts/backup.mjs         # Respaldo de datos irremplazables (JSON +
 node scripts/restore.mjs --dir backups/<fecha>  # Restauración verificada
 node scripts/keepalive.mjs      # Anti-pausa del plan Free (cron diario en
                                 #   .github/workflows/keepalive.yml)
+node scripts/auditar-api.mjs    # Auditoría estática frontend ↔ SQL: cada RPC
+                                #   existe, parámetros y grants; con LIVE=1
+                                #   contrasta contra la base real (drift)
 ```
 
 Todos los tests aceptan `ENTORNO=staging` para correr contra el proyecto

@@ -112,8 +112,15 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 * **Anti fuerza bruta por IP** (`intentos_acceso` + `x-forwarded-for`):
   solo se cuentan los **fallos** (PIN inexistente, identificador
   desconocido), así una sala con IP compartida (NAT del Wi-Fi) no se bloquea.
-  Límites: 60 PINs fallidos / 5 min, 25 logins fallidos / 5 min, 60 consultas
-  de perfil fallidas / 5 min.
+  Los umbrales viven en la tabla `limites_acceso` y se ajustan con un UPDATE
+  (sin tocar funciones):
+
+  | Acción | Umbral | Qué cuenta |
+  | --- | --- | --- |
+  | `pin_fallos` | 60 / 5 min | PIN de sala que no existe |
+  | `login_fallos` | 40 / 5 min | correo/celular/PIN de jugador sin registro |
+  | `perfil_fallos` | 150 / 5 min | correo tipeado que no está registrado |
+
   * Detalle de implementación: el fallo devuelve error "suave"
     (`{error}` en el JSON) para que el registro de intentos **commitee**; el
     wrapper JS lo convierte en excepción normal.
@@ -167,6 +174,8 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 ```bash
 npm run lint                        # oxlint (0 warnings)
 npm run build                       # build de producción
+npm run auditar:api                 # auditoría estática frontend ↔ SQL
+ENTORNO=staging LIVE=1 npm run auditar:api   # + inventario real (drift)
 node scripts/test-logica.mjs        # lógica pura
 node scripts/test-importador.mjs    # importador de bancos
 ENTORNO=staging npm run test:seguridad

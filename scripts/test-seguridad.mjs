@@ -152,7 +152,8 @@ console.log('\n═══ 4. Rate limit de fuerza bruta ═══');
   await host.rpc('volver_al_lobby', { p_sala: sala.id });
   let bloqueado = false;
   let primeraBloqueada = 0;
-  for (let i = 1; i <= 30; i++) {
+  // El umbral vigente es 40 (tabla limites_acceso): se prueban 50 intentos.
+  for (let i = 1; i <= 50; i++) {
     const intento = await anon.rpc('entrar_con_identificador', {
       p_codigo: sala.codigo,
       p_identificador: `no-existe-${MARCA}-${i}@example.com`,
