@@ -252,6 +252,8 @@ src/
     │                             #   pasapalabra, tic-tac, alarma, victoria
     ├── confeti.js                # canvas-confetti: ráfaga, explosión, cañones,
     │                             #   celebración de podio en capas y goteo
+    ├── rendimiento.js            # Gama baja: escala partículas/efectos para
+    │                             #   salas de 20-30 celulares modestos
     ├── importador.js             # Importador universal de bancos: pega texto
     │                             #   (PDF/Word/web), CSV/TSV, JSON, SQL o texto
     │                             #   libre → previsualiza → carga vía RPC
@@ -368,10 +370,11 @@ node scripts/test-e2e.mjs       # E2E contra Supabase REAL: simula anfitrión
                                 #   controles de seguridad (anon no puede
                                 #   crear salas, leer respuestas ni escribir
                                 #   tablas; Realtime entrega). Usa `ws`.
-node scripts/test-concurrencia.mjs  # ESTRÉS: 10 jugadores simultáneos por los
-                                #   4 juegos (unión, doble-tap, carreras de
-                                #   BASTA/procesar/enviar+pasar, integridad
-                                #   de puntos y perfiles). Ver
+node scripts/test-concurrencia.mjs [N]  # ESTRÉS: N jugadores simultáneos por los
+                                #   4 juegos (10 por defecto; `... 25` para
+                                #   simular sala llena), unión, doble-tap,
+                                #   carreras de BASTA/procesar/enviar+pasar,
+                                #   integridad de puntos y perfiles. Ver
                                 #   docs/auditoria-tecnica.md.
 node scripts/test-ui.mjs        # UI con Playwright (Chromium real): landing,
                                 #   login, lanzar cada juego, invitación sin

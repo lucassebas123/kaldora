@@ -8,6 +8,7 @@
 // También actualiza el theme-color del navegador para casar la barra del celu.
 
 import React, { useEffect, useRef } from 'react';
+import { GAMA_BAJA } from '../utils/rendimiento';
 
 export default function FondoAnimado({ densidad = 70, titilar = true, matiz = 270 }) {
   const canvasRef = useRef(null);
@@ -26,6 +27,14 @@ export default function FondoAnimado({ densidad = 70, titilar = true, matiz = 27
     let animacionId = 0;
     let particulas = [];
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Con reduce-motion se dibuja UN frame fijo (sin loop); en gama baja se
+    // recorta la densidad para no gastar GPU en celulares modestos.
+    const reducir = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    const densidadEfectiva = reducir
+      ? Math.min(densidad, 16)
+      : GAMA_BAJA
+        ? Math.min(densidad, 28)
+        : densidad;
 
     function dimensionar() {
       canvas.width = canvas.offsetWidth * dpr;
@@ -35,7 +44,7 @@ export default function FondoAnimado({ densidad = 70, titilar = true, matiz = 27
     function crearParticulas() {
       // Tono de las estrellas sesgado hacia el matiz del juego activo.
       const tonos = [matiz, (matiz + 55) % 360, (matiz + 325) % 360];
-      particulas = Array.from({ length: densidad }, () => ({
+      particulas = Array.from({ length: densidadEfectiva }, () => ({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         r: (Math.random() * 1.6 + 0.4) * dpr,
@@ -82,12 +91,12 @@ export default function FondoAnimado({ densidad = 70, titilar = true, matiz = 27
         }
       }
 
-      animacionId = requestAnimationFrame(dibujar);
+      if (!reducir) animacionId = requestAnimationFrame(dibujar);
     }
 
     function alVisibilidad() {
       if (document.hidden) cancelAnimationFrame(animacionId);
-      else animacionId = requestAnimationFrame(dibujar);
+      else if (!reducir) animacionId = requestAnimationFrame(dibujar);
     }
 
     dimensionar();

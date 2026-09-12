@@ -1,7 +1,8 @@
 # Auditoría técnica — Sincronización de estado y concurrencia (KALDORA)
 
 > Alcance: lógica de los 4 minijuegos bajo carga concurrente (10 jugadores
-> simultáneos). Backend: Postgres (Supabase) con RPCs SECURITY DEFINER.
+> por defecto; el test acepta hasta 190, verificado con 25 y 30 simultáneos).
+> Backend: Postgres (Supabase) con RPCs SECURITY DEFINER.
 > Métodos: lectura línea a línea del SQL del servidor + test de estrés
 > `scripts/test-concurrencia.mjs` ejecutado contra la base real.
 
@@ -24,9 +25,11 @@ Todos los juegos comparten la misma columna `salas.estado`
 **Emisión de eventos**: `postgres_changes` (solo `salas` + `jugadores`, filtrado
 en cliente por entrega intermitente), **broadcast** del canal compartido
 `sala:{id}` (contadores, avisos, instantánea, reloj) y **polling de respaldo
-cada 3 s** + vigilante de reconexión. El estado del servidor es la única
-fuente de verdad: cada acción es una RPC que re-valida estado/tiempo con
-`clock_timestamp()` del servidor; los clientes solo *pintan*.
+cada 3 s** (se saltea si Realtime acaba de entregar un cambio de estado: con
+20-30 jugadores baja muchísimo la carga de consultas) + vigilante de
+reconexión. El estado del servidor es la única fuente de verdad: cada acción
+es una RPC que re-valida estado/tiempo con `clock_timestamp()` del servidor;
+los clientes solo *pintan*.
 
 ## 2. Sincronización de tiempo (lección del bug 00.0)
 
@@ -93,4 +96,6 @@ FASE 5 Rosco ..................... 4×10 correctas en paralelo · +400 exactos
 FASE 6 Integridad ................ perfiles ×10 sobreviven al borrado
 ```
 
-Re-ejecutar tras cada cambio de migraciones: `node scripts/test-concurrencia.mjs`.
+Re-ejecutar tras cada cambio: `node scripts/test-concurrencia.mjs [N]`
+(10 por defecto). Corridas de verificación 2026-09: N=25 ×3 y N=30 ×1 →
+**37/37 aserciones OK** (~464-554 RPCs concurrentes por corrida).

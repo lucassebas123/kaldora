@@ -70,6 +70,11 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   const ultimoEventoRef = useRef(0);
   // Último `sala` visto, para el vigilante (evita side effects en updaters).
   const salaRef = useRef(null);
+  // Último cambio REAL de estado (salas/jugadores o snapshot del host): si
+  // Realtime está entregando, el polling de respaldo se saltea y una sala con
+  // 20-30 jugadores no genera consultas de más. Si el canal enmudece, el
+  // contador envejece y el polling vuelve solo.
+  const ultimoEstadoRef = useRef(0);
   // Nº de la última petición de `recargar`: descarta respuestas fuera de orden.
   const peticionRef = useRef(0);
 
@@ -206,6 +211,12 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     const marcarEvento = () => {
       ultimoEventoRef.current = Date.now();
     };
+    // Cambio de estado de verdad: alimenta al vigilante Y pausa el polling.
+    const marcarEstado = () => {
+      const ahora = Date.now();
+      ultimoEventoRef.current = ahora;
+      ultimoEstadoRef.current = ahora;
+    };
 
     // Reconexión. El canal usa un NOMBRE DETERMINISTA compartido por toda la
     // sala (`sala:{id}`): broadcast y presence solo cruzan entre clientes que
@@ -232,14 +243,14 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
           config: { presence: { key: tokenRef.current || `host-${idSala}` } },
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'salas' }, (payload) => {
-          marcarEvento();
+          marcarEstado();
           const fila = payload.new;
           if (!fila || fila.id !== idSala) return;
           if (payload.eventType === 'DELETE') setSala(null);
           else setSala(fila);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'jugadores' }, (payload) => {
-          marcarEvento();
+          marcarEstado();
           // En DELETE, `payload.old` solo trae la PK (REPLICA IDENTITY DEFAULT):
           // hay que filtrar por id, no por id_sala, o el borrado se pierde.
           if (payload.eventType === 'DELETE') {
@@ -276,6 +287,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
           marcarEvento();
           // Instantánea de estado publicada por el anfitrión (vía rápida).
           if (payload?.tipo === 'sala' && payload.idSala === idSala) {
+            marcarEstado();
             if (payload.sala) setSala(payload.sala);
             if (payload.jugadores) setJugadores(ordenarJugadores(payload.jugadores));
             return;
@@ -341,7 +353,10 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     }, 5000);
 
     // POLLING base de respaldo: cada 3 s, para todos. Barato e infalible.
+    // Si Realtime acaba de entregar un cambio real, se saltea (con 20-30
+    // jugadores eso baja muchísimo las consultas sin perder robustez).
     const intervaloPolling = setInterval(() => {
+      if (Date.now() - ultimoEstadoRef.current < 2500) return;
       recargar();
     }, 3000);
 

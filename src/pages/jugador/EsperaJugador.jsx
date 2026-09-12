@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, Share2, Users, Sparkles } from 'lucide-react';
 import AvatarChip from '../../components/AvatarChip';
 import { JUEGOS } from '../../game/constantes';
+import { GAMA_BAJA } from '../../utils/rendimiento';
 
 const TIPS = {
   rosco: [
@@ -91,7 +92,9 @@ export default function EsperaJugador({ jugadores, online, sesion, jugadorPropio
         <span className="pointer-events-none absolute left-1/2 top-24 h-44 w-44 -translate-x-1/2 rounded-full bg-fuchsia-500/20 blur-3xl" />
         <div className="relative mx-auto mb-3 h-20 w-20">
           <span
-            className="absolute inset-0 rounded-full border-2 border-fuchsia-400/40 animate-ping motion-reduce:animate-none"
+            className={`absolute inset-0 rounded-full border-2 border-fuchsia-400/40 motion-reduce:animate-none ${
+              GAMA_BAJA ? '' : 'animate-ping'
+            }`}
             style={{ animationDuration: '2.8s' }}
           />
           <AvatarChip icono={jugadorPropio?.icono} color={jugadorPropio?.color} tamano="xl" online />

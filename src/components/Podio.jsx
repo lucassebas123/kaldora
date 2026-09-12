@@ -12,6 +12,7 @@ import ConfetiCSS from './ConfetiCSS';
 import { celebracionPodio, confetiGoteo } from '../utils/confeti';
 import { sonarVictoria } from '../utils/sonidos';
 import { vibrarVictoria } from '../utils/haptico';
+import { GAMA_BAJA } from '../utils/rendimiento';
 
 const PODIO_ALTURAS = ['h-24', 'h-16', 'h-12']; // 1º, 2º, 3º
 const PODIO_TONOS = [
@@ -68,17 +69,19 @@ export default function Podio({
     <div className="relative w-full max-w-lg mx-auto flex flex-col items-center gap-6">
       <ConfetiCSS />
 
-      {/* Foco giratorio detrás del podio (rayos de luz del ganador). */}
-      <div className="pointer-events-none absolute -top-28 left-1/2 -z-10 h-[34rem] w-[34rem] -translate-x-1/2 opacity-40">
-        <div
-          className="animate-girar-lento h-full w-full rounded-full"
-          style={{
-            background:
-              'conic-gradient(from 0deg, transparent 0deg, rgba(242,183,5,0.4) 18deg, transparent 40deg, rgba(217,70,239,0.3) 95deg, transparent 115deg, rgba(56,189,248,0.3) 180deg, transparent 205deg, rgba(242,183,5,0.4) 260deg, transparent 285deg, rgba(217,70,239,0.3) 340deg, transparent 360deg)',
-            filter: 'blur(2px)',
-          }}
-        />
-      </div>
+      {/* Foco giratorio detrás del podio (rayos de luz del ganador).
+          Se omite en gama baja: es el efecto más caro de GPU. */}
+      {!GAMA_BAJA && (
+        <div className="pointer-events-none absolute -top-28 left-1/2 -z-10 h-[26rem] w-[26rem] -translate-x-1/2 opacity-40 sm:h-[34rem] sm:w-[34rem]">
+          <div
+            className="animate-girar-lento h-full w-full rounded-full will-change-transform"
+            style={{
+              background:
+                'conic-gradient(from 0deg, transparent 0deg, rgba(242,183,5,0.4) 18deg, transparent 40deg, rgba(217,70,239,0.3) 95deg, transparent 115deg, rgba(56,189,248,0.3) 180deg, transparent 205deg, rgba(242,183,5,0.4) 260deg, transparent 285deg, rgba(217,70,239,0.3) 340deg, transparent 360deg)',
+            }}
+          />
+        </div>
+      )}
 
       <div className="text-center">
         <p className="text-sm font-bold uppercase tracking-[0.3em] text-[#8B80B3] font-display">{titulo}</p>
