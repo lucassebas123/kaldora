@@ -18,15 +18,12 @@
 
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import { readFileSync } from 'node:fs';
+import { cargarEntorno } from './_entorno.mjs';
 
-for (const linea of readFileSync(new URL('../.env', import.meta.url), 'utf8').split('\n')) {
-  const m = linea.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-}
-
-const SUPA_URL = process.env.VITE_SUPABASE_URL;
-const ANON = process.env.VITE_SUPABASE_ANON_KEY;
+// Entorno: `.env` (producción) o `.env.staging` con ENTORNO=staging.
+const env = cargarEntorno();
+const SUPA_URL = env.url;
+const ANON = env.anon;
 const N = Math.min(190, Math.max(2, Number(process.argv[2]) || 10)); // jugadores concurrentes
 
 let pasadas = 0;
@@ -70,8 +67,8 @@ const host = cliente('stress-host');
 const anon = cliente('stress-anon');
 const clientes = Array.from({ length: N + 2 }, (_, i) => cliente(`stress-j${i + 1}`));
 
-const EMAIL_HOST = 'admin31@admin.com';
-const PASS_HOST = '2AdmIN2026';
+const EMAIL_HOST = env.hostEmail;
+const PASS_HOST = env.hostPass;
 const MARCA = Date.now().toString(36);
 const datosDe = (i) => ({
   p_nombre: `Stress${i}`,

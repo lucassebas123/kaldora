@@ -16,16 +16,12 @@
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { cargarEntorno } from './_entorno.mjs';
 
-// --- carga de .env (sin dependencia externa) --------------------------------
-for (const linea of readFileSync(new URL('../.env', import.meta.url), 'utf8').split('\n')) {
-  const m = linea.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-}
-
-const SUPA_URL = process.env.VITE_SUPABASE_URL;
-const ANON = process.env.VITE_SUPABASE_ANON_KEY;
+// Entorno: `.env` (producción) o `.env.staging` con ENTORNO=staging.
+const env = cargarEntorno();
+const SUPA_URL = env.url;
+const ANON = env.anon;
 
 let pasadas = 0;
 let falladas = 0;
@@ -59,8 +55,8 @@ const j1 = createClient(SUPA_URL, ANON, { ...TRANSPORT, auth: { storage: crearAl
 const j2 = createClient(SUPA_URL, ANON, { ...TRANSPORT, auth: { storage: crearAlmacen(), storageKey: 'e2e-j2' } });
 const anon = createClient(SUPA_URL, ANON, { ...TRANSPORT, auth: { storage: crearAlmacen(), storageKey: 'e2e-anon' } });
 
-const EMAIL_HOST = 'admin31@admin.com';
-const PASS_HOST = '2AdmIN2026';
+const EMAIL_HOST = env.hostEmail;
+const PASS_HOST = env.hostPass;
 
 // =============================================================================
 console.log('\n═══ 1. Autenticación del anfitrión ═══');
@@ -69,9 +65,14 @@ const emailIntento = `x${Date.now()}@kaldora.site`;
 const signupAnon = await anon.auth.signUp({ email: emailIntento, password: 'Kaldora2026!e2e' });
 await esperar(400);
 const { data: fantasma } = await anon.from('admins_autorizados').select('id, email').eq('email', emailIntento).maybeSingle();
+// En staging el signup queda habilitado a propósito (para crear hosts de
+// prueba por Admin API); producción lo tiene deshabilitado. El control real
+// (ni usuario ni admin creado) se verifica donde corresponde.
 verificar(
-  'SEGURIDAD: NO existe autorregistro público (ni usuario ni admin creado)',
-  !!signupAnon.error && !fantasma
+  env.staging
+    ? 'SEGURIDAD (producción): autorregistro deshabilitado — omitido en staging'
+    : 'SEGURIDAD: NO existe autorregistro público (ni usuario ni admin creado)',
+  env.staging ? true : !!signupAnon.error && !fantasma
 );
 
 const login = await host.auth.signInWithPassword({ email: EMAIL_HOST, password: PASS_HOST });
@@ -156,8 +157,11 @@ verificar('login con celular OK (con formato +54 ...)',
 const identMalo = await j2.rpc('entrar_con_identificador', {
   p_codigo: salaMC.codigo, p_identificador: `nadie-${MARCA_MC}`,
 });
+// El anti fuerza bruta devuelve error "suave" ({error} en data) para poder
+// registrar el intento: cualquiera de las dos formas es un rechazo válido.
+const mensajeIdentMalo = identMalo.error?.message || identMalo.data?.error || '';
 verificar('identificador desconocido rechazado con mensaje claro',
-  !!identMalo.error && /No encontramos tu registro/.test(identMalo.error.message));
+  /No encontramos tu registro/.test(mensajeIdentMalo), mensajeIdentMalo);
 
 const mcReabierta = await j1.rpc('entrar_con_identificador', {
   p_codigo: salaMC.codigo, p_identificador: regMC.data.pinJugador, p_icono: 'Star', p_color: 'bg-purple-500',

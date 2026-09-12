@@ -7,7 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "keepalive": "node scripts/keepalive.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
+    "test:logica": "node scripts/test-logica.mjs",
+    "test:importador": "node scripts/test-importador.mjs",
+    "test:e2e": "node scripts/test-e2e.mjs",
+    "test:concurrencia": "node scripts/test-concurrencia.mjs",
+    "test:carga": "node scripts/test-carga-3-salas.mjs 20",
+    "test:caos": "node scripts/test-caos.mjs",
+    "test:seguridad": "node scripts/test-seguridad.mjs",
+    "verificar": "npm run lint && npm run test:logica && npm run test:importador && npm run test:seguridad && npm run test:caos && npm run test:e2e && npm run test:concurrencia"
   },
   "dependencies": {
     "@fontsource/space-grotesk": "^5.3.0",

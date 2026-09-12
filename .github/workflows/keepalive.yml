@@ -1,0 +1,28 @@
+# Keep-alive anti-pausa del plan Free de Supabase.
+# Un proyecto Free se pausa tras ~7 días sin actividad de base de datos.
+# Este workflow hace una lectura mínima por día (y a mano cuando quieras).
+#
+# Requiere DOS secrets del repositorio (Settings → Secrets and variables →
+# Actions): VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
+
+name: keepalive
+
+on:
+  schedule:
+    # Todos los días a las 12:10 UTC (09:10 en Argentina).
+    - cron: '10 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Tocar la base (2 lecturas anon)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node scripts/keepalive.mjs

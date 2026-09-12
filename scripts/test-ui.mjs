@@ -15,15 +15,12 @@
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import { readFileSync } from 'node:fs';
+import { cargarEntorno } from './_entorno.mjs';
 
-for (const l of readFileSync(new URL('../.env', import.meta.url), 'utf8').split('\n')) {
-  const m = l.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-}
-
-const SUPA_URL = process.env.VITE_SUPABASE_URL;
-const ANON = process.env.VITE_SUPABASE_ANON_KEY;
+// Entorno: `.env` (producción) o `.env.staging` con ENTORNO=staging.
+const env = cargarEntorno();
+const SUPA_URL = env.url;
+const ANON = env.anon;
 const BASE = 'http://localhost:5173';
 
 let pasadas = 0;
@@ -38,8 +35,8 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 // --- backend: crear sala con el host real (para alimentar la UI) -------------
 const api = createClient(SUPA_URL, ANON, { realtime: { transport: WebSocket } });
 await api.auth.signInWithPassword({
-  email: 'admin31@admin.com',
-  password: '2AdmIN2026',
+  email: env.hostEmail,
+  password: env.hostPass,
 });
 const { data: tokenHost } = await api.auth.getSession();
 const sala = (await api.rpc('crear_sala')).data;

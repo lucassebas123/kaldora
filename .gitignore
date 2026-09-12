@@ -31,3 +31,6 @@ dist-ssr
 
 # Estado temporal de la CLI de Supabase
 supabase/.temp/
+
+# Respaldos locales de base (contienen PII: nunca a Git)
+backups/

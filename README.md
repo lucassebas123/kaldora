@@ -181,23 +181,30 @@ Un **único canal WSS por sala** (`sala:{id}`) transporta 5 cosas a la vez
 (`src/hooks/useSalaRealtime.js`):
 
 1. **`postgres_changes`** sobre `salas` y `jugadores` → estado global y
-   puntajes en vivo. Solo esas 2 tablas están publicadas (sin secretos).
-   *Importante*: el filtro no se pide al servidor (la entrega filtrada es
-   intermitente); se filtra **en el cliente**.
+   puntajes en vivo. Solo esas 2 tablas están publicadas (sin secretos) y la
+   suscripción va **con filtro server-side por sala** (`id_sala=eq.<sala>`,
+   verificado contra la base real: 0 eventos ajenos): con 3 salas simultáneas
+   el fan-out entre salas desaparece. Los DELETE se escuchan aparte (su fila
+   vieja solo lleva la PK) y el polling concilia cualquier borrado perdido.
 2. **Presence** → quién está conectado ahora (jugadores y anfitrión), con
    icono/color para la UI.
 3. **Broadcast `ev`** → eventos de alta frecuencia **sin escribir la base**:
    respuestas voladas, "¡completé el Basta!", avisos del host, instantáneas
    de estado. Miles de eventos/s a costo cero.
-4. **Broadcast `hora_req`/`hora_res`** → **sincronización de reloj**: cada
-   celular mide su deriva contra el anfitrión (ping/pong con descarte de
-   muestras con RTT > 1.5 s y suavizado exponencial 0.3/0.7). Así los
-   cuenta-atrás de 15 s / 20 s / 10 s corren **parejos en todos los
-   dispositivos**.
-5. **Resiliencia**: polling de respaldo cada **3 s** + "vigilante" que
-   re-sincroniza y reconstruye el canal si queda mudo > 12 s. El juego
-   funciona aunque Realtime entregue tarde o nunca (los relojes son por
-   **deadline absoluto** fijado por el servidor, no por ticks).
+4. **Reloj por REST** (`hora_servidor`): cada cliente calibra su offset al
+   empezar la partida (y lo refresca cada 5 min) con un RPC que devuelve la
+   hora del servidor: **cero mensajes de Realtime** (antes eran 2 mensajes
+   por ping, cada 2.5 s por jugador). Los cuenta-atrás de 10-20 s corren
+   parejos igual.
+5. **Resiliencia**: polling de respaldo cada **3 s** en partida (9 s en
+   lobby) + "vigilante" que re-sincroniza y reconstruye el canal si queda
+   mudo > 12 s, con **banner de "Reconectando…"** y reintentos de red en la
+   capa API. El juego funciona aunque Realtime entregue tarde o nunca (los
+   relojes son por **deadline absoluto** fijado por el servidor, no por
+   ticks).
+
+> Presupuesto de mensajes medido, anti-pausa del plan Free, respaldos,
+> rollback y runbook del evento: **[docs/operacion.md](docs/operacion.md)**.
 
 El hook `useCuentaAtras` dibuja el countdown a 20 fps desde el
 `fin` (timestamptz del servidor) + `offsetReloj`, con soporte de pausa sin
@@ -317,9 +324,20 @@ supabase/migrations/
 │                                       #   conteo, locks (trivia/rosco), cupo,
 │                                       #   juego_activo NULL-safe, crear_sala
 │                                       #   exige admin, índice FK registros
-└── 20260119000000_trivia_pregunta_vinculada.sql # V5: la respuesta de trivia
-                                        #   viaja atada a la pregunta vista y el
-                                        #   servidor rechaza id ajeno (rotación)
+├── 20260119000000_trivia_pregunta_vinculada.sql # V5: la respuesta de trivia
+│                                       #   viaja atada a la pregunta vista y el
+│                                       #   servidor rechaza id ajeno (rotación)
+├── 20260120000000_realtime_filtrado.sql # REPLICA IDENTITY FULL en jugadores
+│                                       #   (DELETE + filtro por sala)
+├── 20260121000000_hora_servidor.sql    # RPC de hora para calibrar relojes
+│                                       #   por REST (cero Realtime)
+├── 20260122000000_rosco_update_unico.sql # Rosco: estado+puntos en UN UPDATE
+├── 20260123000000_seguridad_v2.sql     # Rate limit por IP (solo fallos),
+│                                       #   PII mínima, topes, columnas
+├── 20260124000000_seguridad_v2_hotfix.sql # El intento fallido debe commitear
+│                                          #   (error suave)
+└── 20260125000000_unirse_sin_fantasmas.sql # Re-registro en la misma sala
+                                        #   reutiliza la fila del jugador
 ```
 
 Se aplican con **Supabase CLI**: `npx supabase link --project-ref <REF>` y
@@ -337,6 +355,12 @@ Realtime y los permisos).
 * Los RPCs de host exigen sesión de Supabase Auth válida **y dueña** de la sala.
 * El estado de juego vive en un solo `jsonb` (`salas.juego`): una transición
   = un solo evento Realtime, sin tormentas de writes.
+* **Anti fuerza bruta por IP** (v2): se cuentan solo los fallos de PIN/login
+  (60 y 25 por 5 min), así una sala con IP compartida no se bloquea.
+* **PII mínima** (v2): `perfil_por_correo` solo devuelve `existe` + nombre +
+  nickname; `anon` no ve `salas.id_anfitrion`; entradas de juego con topes.
+* **Frontend**: CSP, HSTS, X-Frame-Options, COOP y Permissions-Policy en
+  `vercel.json`.
 
 ## 9. Puesta en marcha local
 
@@ -380,7 +404,19 @@ node scripts/test-ui.mjs        # UI con Playwright (Chromium real): landing,
                                 #   login, lanzar cada juego, invitación sin
                                 #   token (link vencido) y cero errores de
                                 #   consola.
+node scripts/test-seguridad.mjs  # Seguridad v2: rate limit, PII mínima,
+                                #   columnas de anon, topes de entrada
+node scripts/test-caos.mjs      # Caos: Realtime caído en medio de la partida,
+                                #   doble-tap y recuperación por instantánea
+node scripts/backup.mjs         # Respaldo de datos irremplazables (JSON +
+                                #   manifest sha256); no necesita Docker
+node scripts/restore.mjs --dir backups/<fecha>  # Restauración verificada
+node scripts/keepalive.mjs      # Anti-pausa del plan Free (cron diario en
+                                #   .github/workflows/keepalive.yml)
 ```
+
+Todos los tests aceptan `ENTORNO=staging` para correr contra el proyecto
+espejo sin tocar producción. Ver `docs/operacion.md`.
 
 ## 11. Despliegue (Vercel)
 
