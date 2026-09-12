@@ -55,7 +55,7 @@ export default function AvisoActualizacion() {
 
   if (!nuevaVersion) return null;
   return (
-    <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+    <div className="fixed flotante-abajo-centro left-1/2 z-50 -translate-x-1/2">
       <button
         onClick={() => window.location.reload()}
         className="flex items-center gap-2 rounded-full border border-amber-400/40 bg-[#1B1035]/95 px-4 py-2 text-xs font-bold text-amber-200 shadow-xl shadow-black/40 backdrop-blur hover:brightness-110 transition"

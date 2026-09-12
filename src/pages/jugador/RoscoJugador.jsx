@@ -281,7 +281,7 @@ export default function RoscoJugador({ sala, sesion, jugadorPropio, offsetReloj,
           placeholder={`Palabra con ${letra || '...'}`}
           autoFocus
           autoComplete="off"
-          className="flex-1 h-14 rounded-2xl bg-white/[0.06] border border-white/15 px-4 text-lg font-semibold outline-none focus:border-amber-400/80 transition disabled:opacity-40 placeholder:font-normal placeholder:text-sm"
+          className="flex-1 min-w-0 h-14 rounded-2xl bg-white/[0.06] border border-white/15 px-4 text-lg font-semibold outline-none focus:border-amber-400/80 transition disabled:opacity-40 placeholder:font-normal placeholder:text-sm"
         />
         <button
           type="submit"

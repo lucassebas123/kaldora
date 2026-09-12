@@ -254,7 +254,7 @@ export default function Landing() {
       <FondoAnimado />
       <BotonMusica tema="portal" />
 
-      <main className="flex-1 flex flex-col items-center px-5 py-10 sm:py-14">
+      <main className="flex-1 flex flex-col items-center px-5 pt-safe-xl pb-safe-xl sm:py-14">
         {/* Marca */}
         <header className="text-center mb-10 sm:mb-12">
           <h1 className="text-5xl sm:text-7xl font-black tracking-tight font-display">
@@ -283,7 +283,7 @@ export default function Landing() {
             autoComplete="off"
             aria-label="PIN de la sala"
             placeholder="••••••"
-            className="w-full h-20 rounded-2xl bg-white/[0.06] border border-white/15 px-4 text-center text-5xl sm:text-6xl font-black tracking-[0.35em] text-white outline-none focus:border-amber-400/80 focus:bg-amber-400/5 focus:shadow-[0_0_40px_-10px_rgba(251,191,36,0.5)] transition placeholder:text-white/20"
+            className="w-full h-20 rounded-2xl bg-white/[0.06] border border-white/15 pl-[calc(1rem_+_0.35em)] pr-4 text-center text-5xl sm:text-6xl font-black tracking-[0.35em] text-white outline-none focus:border-amber-400/80 focus:bg-amber-400/5 focus:shadow-[0_0_40px_-10px_rgba(251,191,36,0.5)] transition placeholder:text-white/20"
           />
 
           {modoLogin ? (
@@ -508,7 +508,7 @@ function CampoConIcono({ icono, placeholder, value, onChange, tipo = 'text' }) {
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoComplete="off"
-        className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 pl-9 pr-3 text-sm font-medium outline-none focus:border-sky-400/70 transition placeholder:text-[#6C6193] placeholder:font-normal"
+        className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 pl-9 pr-3 text-base font-medium outline-none focus:border-sky-400/70 transition placeholder:text-[#6C6193] placeholder:font-normal"
       />
     </label>
   );

@@ -137,7 +137,7 @@ export default function AdminSala() {
       <FondoAnimado densidad={30} matiz={matiz} />
       <BotonMusica tema={sala.estado === 'finalizado' ? 'podio' : sala.juego_actual || 'sala'} />
 
-      <main className="mx-auto max-w-6xl px-6 py-6 flex flex-col min-h-dvh">
+      <main className="mx-auto max-w-6xl px-6 pt-safe pb-safe flex flex-col min-h-dvh">
         {/* Barra superior de estado */}
         <header className="flex flex-wrap items-center gap-3 mb-6">
           <span className="text-3xl font-black tabular-nums tracking-[0.2em] text-amber-300 font-display">
@@ -173,8 +173,9 @@ export default function AdminSala() {
 
           <span className="flex-1" />
 
-          {/* Controles maestros */}
-          <div className="flex items-center gap-2">
+          {/* Controles maestros: envuelven en pantallas angostas para no
+              ensanchar la página (el ancho mínimo de la fila era 368 px). */}
+          <div className="flex flex-wrap items-center gap-2">
             <BotonControl
               onClick={() => setMostrarBanco(true)}
               icono={<BookOpen size={14} />}
@@ -343,7 +344,7 @@ function LobbyAnfitrion({ sala, jugadores, online, ejecutar, trabajando }) {
         </div>
         <div className="text-center">
           <p className="text-xs uppercase tracking-[0.3em] text-[#8B80B3] font-bold mb-1">Game PIN</p>
-          <p className="text-6xl font-black tracking-[0.15em] text-amber-300">{sala.codigo}</p>
+          <p className="text-6xl font-black tracking-[0.15em] pl-[0.15em] text-amber-300">{sala.codigo}</p>
         </div>
         <button
           onClick={copiarEnlace}

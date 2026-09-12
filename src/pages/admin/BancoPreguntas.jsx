@@ -268,7 +268,7 @@ export default function BancoPreguntas({ onCerrar }) {
             onChange={(e) => setTexto(e.target.value)}
             rows={4}
             placeholder={EJEMPLOS[banco]}
-            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-sky-400/60 font-mono text-[12px]"
+            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-base outline-none focus:border-sky-400/60 font-mono"
           />
 
           <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
@@ -401,13 +401,13 @@ function FilaRosco({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
         value={estado.pregunta}
         onChange={(e) => setEstado({ ...estado, pregunta: e.target.value })}
         placeholder="Pregunta..."
-        className="h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-sm outline-none focus:border-amber-400/70"
+        className="h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-base outline-none focus:border-amber-400/70"
       />
       <input
         value={estado.respuesta}
         onChange={(e) => setEstado({ ...estado, respuesta: e.target.value })}
         placeholder="Respuesta correcta"
-        className="h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-sm outline-none focus:border-green-400/70"
+        className="h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-base outline-none focus:border-green-400/70"
       />
       <span className="flex items-center gap-1">
         <button
@@ -483,7 +483,7 @@ function FilaTrivia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
           value={estado.pregunta}
           onChange={(e) => setEstado({ ...estado, pregunta: e.target.value })}
           placeholder="Pregunta..."
-          className="flex-1 h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-sm outline-none focus:border-sky-400/70"
+          className="flex-1 h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-base outline-none focus:border-sky-400/70"
         />
         <span className="flex items-center gap-1">
           <button
@@ -521,7 +521,7 @@ function FilaTrivia({ fila, guardando, onGuardar, onEliminar, nuevo = false }) {
                 setEstado({ ...estado, opciones });
               }}
               placeholder={`Opción ${i + 1}`}
-              className={`w-full h-9 rounded-lg bg-white/[0.05] border px-3 pr-7 text-sm outline-none transition ${
+              className={`w-full h-9 rounded-lg bg-white/[0.05] border px-3 pr-7 text-base outline-none transition ${
                 estado.indice_correcto === i ? 'border-green-400/70 text-green-200' : 'border-white/10'
               }`}
             />
@@ -573,7 +573,7 @@ function FilaSupervivencia({ fila, guardando, onGuardar, onEliminar, nuevo = fal
         value={estado.pregunta}
         onChange={(e) => setEstado({ ...estado, pregunta: e.target.value })}
         placeholder="Frase para responder Verdadero o Falso..."
-        className="flex-1 h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-sm outline-none focus:border-red-400/70"
+        className="flex-1 h-10 rounded-lg bg-white/[0.05] border border-white/10 px-3 text-base outline-none focus:border-red-400/70"
       />
       <button
         onClick={() => setEstado({ ...estado, es_verdadera: true })}

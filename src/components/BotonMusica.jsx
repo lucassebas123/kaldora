@@ -34,7 +34,7 @@ export default function BotonMusica({ tema = 'portal' }) {
       onClick={alternar}
       title={muteado ? 'Encender la música' : 'Apagar la música'}
       aria-label={muteado ? 'Encender la música' : 'Apagar la música'}
-      className={`fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition active:scale-95 ${
+      className={`fixed flotante-abajo-derecha z-50 flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition active:scale-95 ${
         muteado
           ? 'border-white/15 bg-white/5 text-[#8B80B3] hover:text-white'
           : 'border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/25'

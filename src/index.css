@@ -208,6 +208,27 @@
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 999px; }
 *::-webkit-scrollbar-track { background: transparent; }
 
+/* =============================================================================
+   MÓVIL — anti-overflow y safe-areas (notch / barra de gestos)
+   ============================================================================= */
+
+/* Red de seguridad: ningún sobrante (foco del podio, sacudida del trivia)
+   habilita paneo/zoom horizontal. No se desactiva el zoom del usuario. */
+html, body { overflow-x: clip; }
+
+/* Padding = mínimo visible + área segura del dispositivo. */
+.pt-safe { padding-top: calc(1.25rem + env(safe-area-inset-top)); }
+.pb-safe { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom)); }
+.pt-safe-xl { padding-top: calc(2.5rem + env(safe-area-inset-top)); }
+.pb-safe-xl { padding-bottom: calc(2.5rem + env(safe-area-inset-bottom)); }
+
+/* Botones flotantes por encima del indicador de inicio. */
+.flotante-abajo-derecha {
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  right: calc(1rem + env(safe-area-inset-right));
+}
+.flotante-abajo-centro { bottom: calc(1rem + env(safe-area-inset-bottom)); }
+
 /* Respeto por prefers-reduced-motion. */
 @media (prefers-reduced-motion: reduce) {
   .animate-blob, .animate-degradado, .animate-float, .animate-pop,

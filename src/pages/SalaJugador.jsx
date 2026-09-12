@@ -182,7 +182,7 @@ export default function SalaJugador() {
       <FondoAnimado densidad={45} matiz={matiz} />
       <BotonMusica tema={temaMusica(sala)} />
 
-      <main className="flex-1 flex flex-col items-center px-4 py-5 sm:px-6">
+      <main className="flex-1 flex flex-col items-center px-4 pt-safe pb-safe sm:px-6">
         <div className="w-full max-w-md flex flex-col gap-4 flex-1">
           <HeaderJugador
             sesion={sesion}
