@@ -282,7 +282,7 @@ src/
 
 | Juego | Mecánica | Puntaje |
 | --- | --- | --- |
-| **El Rosco** ⭕ (v3: individual) | Abecedario circular A–Ñ. Reloj **total continuo** (120/180/300 s). Cada letra es un pasapalabra: responder, pasar o cerrar; al terminar la pasada se vuelve a ciclar **solo por las pendientes**. Validación server-side (normalización + Levenshtein). | **+100** acierto, **−50** error, pasapalabra 0 |
+| **El Rosco** ⭕ (v3: individual) | Abecedario circular A–Ñ. Reloj **total continuo** (240/360/600 s · **5 min por defecto**). Cada letra es un pasapalabra: responder, pasar o cerrar; al terminar la pasada se vuelve a ciclar **solo por las pendientes**. Validación server-side (normalización + Levenshtein). | **+100** acierto, **−50** error, pasapalabra 0 |
 | **Trivia de Velocidad** ⚡ | Base de **1000 pts** que se derrite ms a ms durante **20 s** contra el deadline del servidor. | Rachas: 3+ → **x2**, 5+ → **x3** |
 | **Basta!** 🎯 | Letra común + 5 categorías. El primero en completar dispara la cuenta regresiva **letal de 10 s**. Al cerrar, el diccionario (600k palabras) y los léxicos marcan palabras dudosas como **avisos** (naranja/ámbar), pero el puntaje lo decide el anfitrión: única **+10**, repetida **+5**, tachada 0. Si re-valida a mano una palabra inexistente, el diccionario la aprende. | 10 / 5 / 0 |
 | **Supervivencia** 💀 | Verdadero/Falso a eliminación súbita: un error (o no responder) te elimina y pasás a espectador (pantalla roja). | **+25** por acierto |

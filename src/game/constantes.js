@@ -7,7 +7,7 @@ export const JUEGOS = {
     id: 'rosco',
     nombre: 'El Rosco',
     emoji: '⭕',
-    descripcion: 'Abecedario circular. 15 segundos por letra: +100 acierto, -50 error.',
+    descripcion: 'Abecedario circular con reloj total: +100 acierto, −50 error.',
     color: 'from-amber-400 to-orange-500',
     acento: 'text-amber-300',
     matiz: 42,
@@ -45,8 +45,9 @@ export const JUEGOS = {
 export const MATIZ_BASE = 270;
 
 export const ROSCO = {
-  SEGUNDOS_DEFECTO: 150,
-  DURACIONES: [120, 180, 300],
+  // Tiempo duplicado (2026-09): 5 min por defecto para poder pensar cada letra.
+  SEGUNDOS_DEFECTO: 300,
+  DURACIONES: [240, 360, 600],
   GRACIA_MS: 2500,
   PUNTOS_ACIERTO: 100,
   PUNTOS_ERROR: -50,
