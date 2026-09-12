@@ -21,16 +21,51 @@ import { cargarEntorno } from './_entorno.mjs';
 const env = cargarEntorno();
 const SUPA_URL = env.url;
 const ANON = env.anon;
-const BASE = 'http://localhost:5173';
+// BASE_UI permite medir contra producción (p. ej. https://kaldora.site).
+const BASE = process.env.BASE_UI || 'http://localhost:5173';
 
 let pasadas = 0;
 let falladas = 0;
-function verificar(desc, ok) {
+function verificar(desc, ok, detalle = '') {
   if (ok) pasadas++;
   else falladas++;
-  console.log(`  ${ok ? '✓' : '✗ FALLO:'} ${desc}`);
+  console.log(`  ${ok ? '✓' : '✗ FALLO:'} ${desc}${!ok && detalle ? ` → ${detalle}` : ''}`);
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Regresión móvil: en 320/360/390 px la página no debe ensancharse (si se
+// ensancha, el usuario tiene que alejar el zoom) y ningún control flotante
+// fijo cuenta (no genera scroll).
+async function verificarSinOverflow(page, etiqueta) {
+  const original = page.viewportSize();
+  for (const [w, h] of [
+    [320, 568],
+    [360, 640],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width: w, height: h });
+    await esperar(220);
+    const r = await page.evaluate(() => {
+      const vw = window.innerWidth;
+      const malos = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const b = el.getBoundingClientRect();
+        if (b.width === 0 && b.height === 0) continue;
+        if (getComputedStyle(el).position === 'fixed') continue;
+        if (b.right > vw + 1 || b.left < -1) {
+          malos.push(`${el.tagName.toLowerCase()}[${Math.round(b.left)}..${Math.round(b.right)}]`);
+        }
+      }
+      return { vw, scrollWidth: document.documentElement.scrollWidth, malos: malos.slice(0, 4) };
+    });
+    verificar(
+      `[${etiqueta} @${w}px] sin overflow horizontal`,
+      r.scrollWidth <= r.vw + 1,
+      `scrollWidth ${r.scrollWidth} > ${r.vw} · ${r.malos.join(' ')}`
+    );
+  }
+  if (original) await page.setViewportSize(original);
+}
 
 // --- backend: crear sala con el host real (para alimentar la UI) -------------
 const api = createClient(SUPA_URL, ANON, { realtime: { transport: WebSocket } });
@@ -73,6 +108,20 @@ await pagJugador.goto(`${BASE}/?sala=${sala.codigo}`, { waitUntil: 'domcontentlo
 const pinVisible = await pagJugador.locator('input[aria-label="PIN de la sala"]').inputValue();
 verificar('landing precarga el PIN desde la URL', pinVisible === sala.codigo);
 
+// Regresión iOS: inputs de menos de 16 px hacen que Safari zoomée solo.
+const fuentesInputs = await pagJugador.$$eval('input', (els) =>
+  els
+    .filter((e) => e.offsetParent !== null && e.type !== 'hidden' && e.type !== 'file')
+    .map((e) => parseFloat(getComputedStyle(e).fontSize))
+);
+verificar(
+  'inputs visibles ≥16px (sin auto-zoom en iOS)',
+  fuentesInputs.length > 0 && fuentesInputs.every((f) => f >= 16),
+  `fontSizes: ${fuentesInputs.join(',')}`
+);
+
+await verificarSinOverflow(pagJugador, 'landing');
+
 await pagJugador.locator('input[placeholder^="Ej:"]').fill('PlaywrightPro');
 await pagJugador.locator('input[placeholder="Nombre"]').fill('Nora');
 await pagJugador.locator('input[placeholder="Apellido"]').fill('De Pruebas');
@@ -104,6 +153,7 @@ verificar('registro completo → entra a la sala (/jugar/...)', llegoJugador);
 const esperaVisible = await pagJugador.getByText('¡Estás dentro, PlaywrightPro!').waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
 verificar('sala de espera visible con el nickname', esperaVisible);
 if (!esperaVisible) console.log('    [debug jugador]', (await pagJugador.locator('body').innerText()).slice(0, 300).replace(/\n/g, ' | '));
+if (esperaVisible) await verificarSinOverflow(pagJugador, 'sala de espera');
 
 // -----------------------------------------------------------------------------
 console.log('\n═══ 1b. Aviso de conexión (regresión: silencio ≠ caída) ═══');
@@ -147,6 +197,7 @@ const jugadorEnLobby = await pagHost.getByText('PlaywrightPro').first().waitFor(
 verificar('jugador visible en el lobby del admin', jugadorEnLobby);
 verificar('botón Banco de preguntas presente', (await pagHost.getByText('Banco de preguntas').count()) > 0);
 if (!pinEnPanel) console.log('    [debug admin]', (await pagHost.locator('body').innerText()).slice(0, 300).replace(/\n/g, ' | '));
+if (pinEnPanel) await verificarSinOverflow(pagHost, 'panel-admin');
 
 // -----------------------------------------------------------------------------
 console.log('\n═══ 3. Lanzar LOS 4 JUEGOS (aquí vivía la pantalla en blanco) ═══');
@@ -192,6 +243,7 @@ for (const juego of juegos) {
     console.log('    [debug host]', textoHost.slice(0, 250).replace(/\n/g, ' | '));
     console.log('    [debug jugador]', (await pagJugador.locator('body').innerText()).slice(0, 250).replace(/\n/g, ' | '));
   }
+  if (jugadorOk) await verificarSinOverflow(pagJugador, juego.id);
 }
 
 // -----------------------------------------------------------------------------
@@ -199,6 +251,7 @@ console.log('\n═══ 4. Podio final ═══');
 await pagHost.getByRole('button', { name: 'Terminar' }).click();
 const podio = await pagJugador.locator('body').getByText(/Podio final|Partida finalizada|GANASTE/).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
 verificar('podio en el celular del jugador', podio);
+if (podio) await verificarSinOverflow(pagJugador, 'podio');
 
 // El confeti del podio (canvas-confetti) crea un canvas fixed con
 // pointer-events:none. Fase 0: verificar que realmente se dispara.
