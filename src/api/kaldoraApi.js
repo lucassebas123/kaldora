@@ -44,21 +44,54 @@ function guardarSesionDesdeRpc(data, extras = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Envoltorio de RPC con errores tipados
+// Envoltorio de RPC con errores tipados y reintento de red
 // ---------------------------------------------------------------------------
-function envolver(promise) {
-  return promise.then(({ data, error }) => {
-    if (error) {
-      const err = new Error(error.message || 'Error de servidor');
-      err.code = error.code;
-      throw err;
+// Un fallo de RED (fetch failed, timeout, socket) se reintenta con backoff +
+// jitter: casi siempre significa que la petición no llegó. Los errores de
+// NEGOCIO (ya respondiste, la letra cambió, se acabó el tiempo) NO se
+// reintentan: se propagan tal cual para que la página concilie su estado.
+const ERROR_DE_RED =
+  /fetch failed|network|timeout|timed out|ECONN|socket|terminated|Failed to fetch|offline/i;
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export function esErrorDeRed(err) {
+  return ERROR_DE_RED.test(String(err?.message || ''));
+}
+
+function envolver(fabricarPromesa, { reintentos = 2 } = {}) {
+  return (async () => {
+    for (let intento = 0; ; intento++) {
+      let data;
+      let error;
+      try {
+        ({ data, error } = await fabricarPromesa());
+      } catch (e) {
+        error = e;
+      }
+      if (!error) {
+        // Error "suave" anti fuerza bruta: los RPC registran el intento y
+        // devuelven {error: '...'} en vez de lanzar (así el registro
+        // commitea). Acá se convierte en excepción normal: la UX no cambia.
+        if (data && typeof data === 'object' && typeof data.error === 'string') {
+          const err = new Error(data.error);
+          err.code = 'P0001';
+          throw err;
+        }
+        return data;
+      }
+      if (intento >= reintentos || !esErrorDeRed(error)) {
+        const err = new Error(error.message || 'Error de servidor');
+        err.code = error.code;
+        throw err;
+      }
+      // Backoff exponencial con jitter: 400-700ms, 800-1400ms.
+      await dormir(400 * 2 ** intento + Math.random() * 300);
     }
-    return data;
-  });
+  })();
 }
 
 function rpc(nombre, parametros) {
-  return envolver(supabase.rpc(nombre, parametros));
+  return envolver(() => supabase.rpc(nombre, parametros));
 }
 
 // PostgREST corta los SELECT en ~1000 filas: pagina hasta traer todo
@@ -145,6 +178,10 @@ export const api = {
     return guardarSesionDesdeRpc(data, { icono, color });
   },
   salirSala: (token = tokenJugador()) => rpc('salir_sala', { p_token: token }),
+
+  // ---- Reloj ----
+  // Hora del servidor para calibrar los cuenta-atrás sin tráfico de Realtime.
+  horaServidor: () => rpc('hora_servidor'),
 
   // ---- Rosco----
   roscoIniciar: (idSala, duracionSeg) =>

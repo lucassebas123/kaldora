@@ -8,9 +8,9 @@
 //   3. PRESENCE -> quién está conectado ahora (jugadores y anfitrión)
 //   4. BROADCAST 'ev' -> eventos de alta frecuencia SIN escribir la base
 //      (respuestas voladas, "¡completé el Basta!", avisos del host).
-//   5. BROADCAST 'hora_req'/'hora_res' -> sincronización de reloj. Cada cliente
-//      mide la deriva respecto al anfitrión para que los cuenta-atrás de
-//      15 s / 10 s / 20 s corran parejos en todos los dispositivos.
+//   5. RELOJ por REST: `hora_servidor` calibra el offset local al empezar la
+//      partida (y cada 5 min) para que los cuenta-atrás corran parejos sin
+//      gastar un solo mensaje de Realtime.
 //
 // Uso:
 //   const { sala, jugadores, online, offsetReloj, listo, broadcast, enviar } =
@@ -18,10 +18,28 @@
 //
 // - `broadcast` es un emitter local para que la UI escuche eventos 'ev'
 //   sin re-crear canales (lo consume useEventoSala).
+//
+// PRESUPUESTO DE MENSAJES (medido 2026-09-12 con scripts/test-carga-3-salas):
+//   * postgres_changes con FILTRO server-side por sala: verificado contra la
+//     base real (3 salas × 20, 0 eventos ajenos, 0 entregas perdidas). Antes
+//     cada cambio de cualquier sala se entregaba a todos los clientes.
+//   * ping de reloj ADAPTATIVO: ráfaga inicial de 2 muestras al empezar la
+//     partida y después 1 cada 90 s. Antes: 1 cada 2.5 s por jugador, que con
+//     3 salas × 20 medía ~870 msg/s solo de reloj (el plan Free permite 100).
+//   * polling de respaldo más lento fuera de partida (9 s en lobby vs 3 s).
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { leerSesionJugador } from '../api/kaldoraApi';
+import { leerSesionJugador, api } from '../api/kaldoraApi';
+
+// Reloj por REST: UNA muestra de calibración al empezar la partida (si el
+// offset está vencido) y después 1 cada 5 minutos. La deriva de un celular es
+// de milisegundos por minuto: con esta cadencia los cuenta-atrás de 10-20 s
+// quedan parejos y NO se gasta cuota de Realtime (antes: ping/pong por
+// broadcast cada 2.5 s por jugador = ~870 msg/s con 3 salas × 20).
+const PING_MS_CALIBRACION = 1500;
+const PING_MS_ESTABLE = 300000;
+const PING_MS_REINTENTO = 5000; // backoff si la muestra falla (sin red)
 /** Ordena jugadores: 1º puntos, 2º menos eliminados (vivos arriba), 3º racha. */
 function ordenarJugadores(jugadores) {
   return [...jugadores].sort((a, b) => {
@@ -55,6 +73,10 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   const [online, setOnline] = useState(() => new Set());
   const [listo, setListo] = useState(false);
   const [error, setError] = useState(null);
+  // `degradado` = Realtime dejó de entregar (canal mudo > 12 s) o no hay red.
+  // La UI lo muestra; el polling y los deadlines del servidor siguen
+  // corrigiendo el estado solo, sin perder puntajes.
+  const [degradado, setDegradado] = useState(false);
   // La sala fue VERIFICADA contra la base (recargar completó): con esto se
   // distingue "todavía cargando" (sala null transitorio) de "sala inexistente".
   const [verificada, setVerificada] = useState(false);
@@ -68,6 +90,13 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   const esAnfitrionRef = useRef(false);
   const trackeadoRef = useRef(false);
   const ultimoEventoRef = useRef(0);
+  // Reloj adaptativo: se calibra al empezar la partida (una muestra) y se
+  // refresca cada 5 minutos. `ultimaRespuestaRef` evita recalibrar de nuevo en
+  // partidas consecutivas dentro de la misma sesión.
+  const ultimoPingRef = useRef(0);
+  const ultimaRespuestaRef = useRef(0);
+  const calibrarPendienteRef = useRef(true);
+  const juegoActivoRef = useRef(false);
   // Último `sala` visto, para el vigilante (evita side effects en updaters).
   const salaRef = useRef(null);
   // Último cambio REAL de estado (salas/jugadores o snapshot del host): si
@@ -87,6 +116,17 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   }, [esAnfitrion]);
   useEffect(() => {
     salaRef.current = sala;
+    const jugando = sala?.estado === 'jugando';
+    // Al arrancar una partida (transición a 'jugando') se calibra el reloj SOLO
+    // si el offset está vencido (o nunca se midió); si no, se reutiliza el de
+    // la partida anterior y no se envía ni un mensaje extra.
+    if (jugando && !juegoActivoRef.current) {
+      if (Date.now() - ultimaRespuestaRef.current > PING_MS_ESTABLE) {
+        calibrarPendienteRef.current = true;
+        ultimoPingRef.current = 0;
+      }
+    }
+    juegoActivoRef.current = jugando;
   }, [sala]);
 
   // Suelta TODOS los canales de esta sala antes de crear uno nuevo.
@@ -119,7 +159,12 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     if (!idSala) return null;
     const peticion = ++peticionRef.current;
     const [resSala, resJugadores] = await Promise.all([
-      supabase.from('salas').select('*').eq('id', idSala).maybeSingle(),
+      // Columnas explícitas: anon ya no tiene SELECT sobre id_anfitrion.
+      supabase
+        .from('salas')
+        .select('id, codigo, estado, juego_actual, juego, creado_en')
+        .eq('id', idSala)
+        .maybeSingle(),
       supabase.from('jugadores').select('*').eq('id_sala', idSala),
     ]);
     // Respuesta fuera de orden (una petición vieja resolvió tarde): descartar.
@@ -185,14 +230,26 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   // Sincronía de reloj: los clientes miden su deriva contra el anfitrión.
   // offset = t_anfitrion + rtt/2 - t_local  (muestreo con mínimo RTT)
   // ---------------------------------------------------------------------------
-  const pingReloj = useCallback(() => {
-    const canal = canalRef.current;
-    if (!canal || esAnfitrionRef.current) return;
-    canal.send({
-      type: 'broadcast',
-      event: 'hora_req',
-      payload: { t: Date.now(), de: tokenRef.current },
-    });
+  const sincronizarReloj = useCallback(async () => {
+    // Fuera de partida no hay cuenta atrás que calibrar y con la pestaña
+    // oculta nadie ve el reloj: no se consulta nada.
+    if (!juegoActivoRef.current) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    ultimoPingRef.current = Date.now();
+    try {
+      const t0 = Date.now();
+      const ts = await api.horaServidor();
+      const t1 = Date.now();
+      const tServidor = new Date(ts).getTime();
+      if (!Number.isFinite(tServidor)) return;
+      // offset = hora del servidor + mitad del RTT - hora local.
+      const offset = tServidor + (t1 - t0) / 2 - t1;
+      setOffsetReloj((prev) => (prev === 0 ? offset : prev * 0.3 + offset * 0.7));
+      ultimaRespuestaRef.current = Date.now();
+      calibrarPendienteRef.current = false;
+    } catch {
+      // Sin red: el intervalo reintenta con backoff.
+    }
   }, []);
 
   useEffect(() => {
@@ -205,18 +262,33 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       await recargar();
     })();
 
-    // Sin `filter` de postgres_changes: la entrega filtrada de Realtime es
-    // intermitente (entrega 1 evento y enmudece). Filtramos en el cliente y
-    // un vigilante re-sincroniza si el canal queda mudo.
+    // postgres_changes CON filtro server-side por sala: verificado contra la
+    // base real el 2026-09-12 (3 salas × 20, 0 eventos ajenos, 0 perdidos).
+    // El filtro corta el fan-out entre salas (~3× menos tráfico con 3 salas).
+    // `jugadores` usa REPLICA IDENTITY FULL (migración 20) para que los
+    // DELETE también matcheen el filtro. Igual se filtra en el cliente por
+    // robustez, y el vigilante re-sincroniza si el canal queda mudo.
     const marcarEvento = () => {
       ultimoEventoRef.current = Date.now();
+      setDegradado(false);
     };
     // Cambio de estado de verdad: alimenta al vigilante Y pausa el polling.
     const marcarEstado = () => {
       const ahora = Date.now();
       ultimoEventoRef.current = ahora;
       ultimoEstadoRef.current = ahora;
+      setDegradado(false);
     };
+
+    // Sin red: aviso inmediato. Al volver, la reconexión del canal y el
+    // polling re-sincronizan todo (los puntajes viven en el servidor).
+    const alDesconectar = () => setDegradado(true);
+    const alReconectar = () => {
+      ultimoEventoRef.current = Date.now();
+      setDegradado(false);
+    };
+    window.addEventListener('offline', alDesconectar);
+    window.addEventListener('online', alReconectar);
 
     // Reconexión. El canal usa un NOMBRE DETERMINISTA compartido por toda la
     // sala (`sala:{id}`): broadcast y presence solo cruzan entre clientes que
@@ -242,14 +314,14 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
         .channel(`sala:${idSala}`, {
           config: { presence: { key: tokenRef.current || `host-${idSala}` } },
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'salas' }, (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'salas', filter: `id=eq.${idSala}` }, (payload) => {
           marcarEstado();
           const fila = payload.new;
           if (!fila || fila.id !== idSala) return;
           if (payload.eventType === 'DELETE') setSala(null);
           else setSala(fila);
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'jugadores' }, (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'jugadores', filter: `id_sala=eq.${idSala}` }, (payload) => {
           marcarEstado();
           // En DELETE, `payload.old` solo trae la PK (REPLICA IDENTITY DEFAULT):
           // hay que filtrar por id, no por id_sala, o el borrado se pierde.
@@ -294,32 +366,21 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
           }
           emisor.emit(payload?.tipo, payload);
         })
-        // Reloj: el anfitrión responde con SU marca de tiempo.
-        .on('broadcast', { event: 'hora_req' }, ({ payload }) => {
-          if (!esAnfitrionRef.current) return;
-          canal.send({
-            type: 'broadcast',
-            event: 'hora_res',
-            payload: { tReq: payload?.t, tServer: Date.now(), de: payload?.de },
-          });
-        })
-        .on('broadcast', { event: 'hora_res' }, ({ payload }) => {
-          if (payload?.de !== tokenRef.current) return;
-          if (!Number.isFinite(payload?.tReq) || !Number.isFinite(payload?.tServer)) return;
-          const rtt = Date.now() - payload.tReq;
-          if (!Number.isFinite(rtt) || rtt < 0 || rtt > 1500) return; // muestra podrida
-          const offset = payload.tServer + rtt / 2 - Date.now();
-          setOffsetReloj((prev) => (prev === 0 ? offset : prev * 0.3 + offset * 0.7));
-        })
+        // El reloj ya NO viaja por broadcast: cada cliente lo calibra por REST
+        // con `hora_servidor` (ver sincronizarReloj). Cero mensajes Realtime.
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             setListo(true);
             // Canal nuevo: hay que volver a publicar la presencia (el ref
             // quedaba en true del canal anterior y `trackear` retornaba antes).
             trackeadoRef.current = false;
+            // Canal nuevo = conexión nueva: recalibrar el reloj.
+            ultimaRespuestaRef.current = 0;
+            calibrarPendienteRef.current = true;
+            ultimoPingRef.current = 0;
             await trackear();
             sincronizarPresencia();
-            pingReloj();
+            sincronizarReloj();
           }
         });
 
@@ -331,10 +392,15 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
 
     conectar();
 
-    // Muestras periódicas de reloj mientras la pestaña viva (solo clientes).
+    // Reloj adaptativo (solo clientes): ráfaga de calibración al arrancar la
+    // partida y luego refresco cada 90 s. Fuera de partida o con la pestaña
+    // oculta no se envía nada (pingReloj filtra solo).
     const intervaloReloj = setInterval(() => {
-      if (!esAnfitrionRef.current) pingReloj();
-    }, 2500);
+      const objetivo = calibrarPendienteRef.current ? PING_MS_CALIBRACION : PING_MS_ESTABLE;
+      if (Date.now() - ultimaRespuestaRef.current < objetivo) return;
+      if (Date.now() - ultimoPingRef.current < PING_MS_REINTENTO) return;
+      sincronizarReloj();
+    }, 1500);
 
     // VIGILANTE: si el canal queda mudo con la partida activa, re-sincroniza
     // el estado y reconstruye el canal (Realtime puede dejar de entregar).
@@ -342,6 +408,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       const silencio = Date.now() - ultimoEventoRef.current;
       if (silencio > 12000) {
         ultimoEventoRef.current = Date.now();
+        setDegradado(true);
         recargar();
         if (esAnfitrionRef.current) return; // el anfitrión reacciona al estado poll
         // Con partida activa reconstruimos el canal para no perder el juego.
@@ -352,11 +419,12 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       }
     }, 5000);
 
-    // POLLING base de respaldo: cada 3 s, para todos. Barato e infalible.
-    // Si Realtime acaba de entregar un cambio real, se saltea (con 20-30
-    // jugadores eso baja muchísimo las consultas sin perder robustez).
+    // POLLING base de respaldo: cada 3 s en partida (barato e infalible),
+    // cada 9 s en lobby/finalizado (ahí no pasa nada). Si Realtime acaba de
+    // entregar un cambio real, se saltea igual.
     const intervaloPolling = setInterval(() => {
-      if (Date.now() - ultimoEstadoRef.current < 2500) return;
+      const enPartida = juegoActivoRef.current || salaRef.current?.estado === 'pausado';
+      if (Date.now() - ultimoEstadoRef.current < (enPartida ? 2500 : 9000)) return;
       recargar();
     }, 3000);
 
@@ -365,6 +433,8 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       clearInterval(intervaloReloj);
       clearInterval(vigilante);
       clearInterval(intervaloPolling);
+      window.removeEventListener('offline', alDesconectar);
+      window.removeEventListener('online', alReconectar);
       // Remueve el canal vigente y cualquier reconexión en vuelo del mismo
       // topic (la reconexión es asíncrona y puede crear uno tras el unmount).
       // El próximo `conectar()` espera a que estos canales desaparezcan.
@@ -373,7 +443,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       trackeadoRef.current = false;
       setOnline(new Set());
     };
-  }, [idSala, recargar, sincronizarPresencia, trackear, pingReloj, emisor, limpiarCanalesDeSala]);
+  }, [idSala, recargar, sincronizarPresencia, trackear, sincronizarReloj, emisor, limpiarCanalesDeSala]);
 
   // Re-trackear cuando el jugador consigue su sesión (join tardío).
   useEffect(() => {
@@ -412,6 +482,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     listo,
     verificada,
     error,
+    degradado,
     offsetReloj,
     recargar,
     enviar,

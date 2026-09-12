@@ -18,6 +18,7 @@ import { Loader2, WifiOff, Sparkles } from 'lucide-react';
 import FondoAnimado from '../components/FondoAnimado';
 import BotonMusica from '../components/BotonMusica';
 import HeaderJugador from '../components/HeaderJugador';
+import BannerConexion from '../components/BannerConexion';
 import Podio from '../components/Podio';
 import TransicionVista from '../components/TransicionVista';
 import { useSalaRealtime } from '../hooks/useSalaRealtime';
@@ -54,7 +55,7 @@ export default function SalaJugador() {
     navigate(`/?sala=${codigo}`, { replace: true });
   }, [sesion, codigo, navigate]);
 
-  const { sala, jugadores, online, listo, verificada, error, offsetReloj, escuchar, enviar, recargar } =
+  const { sala, jugadores, online, listo, verificada, error, degradado, offsetReloj, escuchar, enviar, recargar } =
     useSalaRealtime(sesion?.idSala, { sesionJugador: sesion, esAnfitrion: false });
 
   const jugadorPropio = useMemo(
@@ -190,6 +191,7 @@ export default function SalaJugador() {
             racha={jugadorPropio?.racha || 0}
             onSalir={salir}
           />
+          <BannerConexion visible={degradado} />
           <TransicionVista claveVista={vista} className="flex flex-col gap-4 flex-1">
             {contenido}
           </TransicionVista>

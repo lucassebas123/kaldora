@@ -17,6 +17,7 @@ import {
 import FondoAnimado from '../../components/FondoAnimado';
 import BotonMusica from '../../components/BotonMusica';
 import AvatarChip from '../../components/AvatarChip';
+import BannerConexion from '../../components/BannerConexion';
 import Podio from '../../components/Podio';
 import TransicionVista from '../../components/TransicionVista';
 import BancoPreguntas from './BancoPreguntas';
@@ -34,7 +35,7 @@ export default function AdminSala() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { sala, jugadores, online, listo, error, offsetReloj, escuchar, enviar, publicarEstado, recargar } =
+  const { sala, jugadores, online, listo, error, degradado, offsetReloj, escuchar, enviar, publicarEstado, recargar } =
     useSalaRealtime(id, { esAnfitrion: true });
 
   const [trabajando, setTrabajando] = useState(false);
@@ -229,6 +230,9 @@ export default function AdminSala() {
             </button>
           </div>
         </header>
+
+        {/* Conexión degradada: el juego sigue por polling/deadlines. */}
+        <BannerConexion visible={degradado} texto="Conexión inestable: re-sincronizando… el juego no se detiene." />
 
         {/* Aviso visible de RPC fallida (antes solo iba a consola). */}
         {aviso && (

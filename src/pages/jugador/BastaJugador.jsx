@@ -42,6 +42,8 @@ export default function BastaJugador({
   const [urgencia, setUrgencia] = useState(null); // {nickname}
   const [enviando, setEnviando] = useState(false);
   const declaradoRef = useRef(false);
+  // Throttle del aviso cosmético "escribió una palabra" (ver guardarPalabra).
+  const ultimoAvisoRef = useRef(0);
 
   // Categorías de la ronda (nombres por id).
   useEffect(() => {
@@ -130,7 +132,14 @@ export default function BastaJugador({
       await api.bastaEnviar(idCategoria, texto);
       setGuardadas((g) => ({ ...g, [idCategoria]: true }));
       // Aviso volado al panel del anfitrión (contador de palabras en vivo).
-      enviar('basta_palabra', { idJugador: sesion.idJugador, idCategoria });
+      // Throttle por jugador (1 cada ~1.2 s): el contador real llega igual por
+      // postgres_changes; esto es cosmético y con 20 jugadores generaba
+      // cientos de broadcasts por ronda.
+      const ahora = Date.now();
+      if (ahora - ultimoAvisoRef.current >= 1200) {
+        ultimoAvisoRef.current = ahora;
+        enviar('basta_palabra', { idJugador: sesion.idJugador, idCategoria });
+      }
     } catch (err) {
       if (String(err.message).includes('cerró el tiempo') || String(err.message).includes('no acepta')) {
         // La ronda ya cerró: la UI muta sola por el cambio de fase.
