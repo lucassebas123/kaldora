@@ -106,6 +106,39 @@ verificar('sala de espera visible con el nickname', esperaVisible);
 if (!esperaVisible) console.log('    [debug jugador]', (await pagJugador.locator('body').innerText()).slice(0, 300).replace(/\n/g, ' | '));
 
 // -----------------------------------------------------------------------------
+console.log('\n═══ 1b. Aviso de conexión (regresión: silencio ≠ caída) ═══');
+// El aviso salía por falso positivo cuando el canal quedaba 12 s "mudo":
+// desde que el reloj va por REST y los canales filtran por sala, no recibir
+// eventos es lo normal. Debe aparecer SOLO con una falla real.
+const avisoBanner = pagJugador.getByText(/Reconectando|Conexión inestable/i);
+await esperar(20000);
+const falsoPositivo = await avisoBanner.count();
+verificar('20 s sin actividad: NO aparece el aviso (silencio no es caída)', falsoPositivo === 0);
+if (falsoPositivo) {
+  console.log('    [debug aviso]', (await pagJugador.locator('body').innerText()).slice(0, 200).replace(/\n/g, ' | '));
+}
+
+// Caída real del dispositivo: debe reaccionar (banner o pantalla de conexión).
+await ctxJugador.setOffline(true);
+const reaccionaCaida = await pagJugador
+  .getByText(/Reconectando|Conexión inestable|Perdimos la conexión/i)
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('sin red: el cliente avisa al usuario', reaccionaCaida);
+
+await ctxJugador.setOffline(false);
+const seRecupera = await pagJugador
+  .getByText('¡Estás dentro, PlaywrightPro!')
+  .waitFor({ timeout: 20000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('al volver la red: se recupera solo (sala de espera visible)', seRecupera);
+await esperar(1000);
+verificar('al volver la red: el aviso desaparece', (await avisoBanner.count()) === 0);
+
+// -----------------------------------------------------------------------------
 console.log('\n═══ 2. Panel admin: la sala carga ═══');
 await pagHost.goto(`${BASE}/admin/sala/${sala.id}`, { waitUntil: 'domcontentloaded' });
 const pinEnPanel = await pagHost.getByText(sala.codigo).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false);

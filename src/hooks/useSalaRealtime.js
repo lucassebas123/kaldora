@@ -73,9 +73,10 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   const [online, setOnline] = useState(() => new Set());
   const [listo, setListo] = useState(false);
   const [error, setError] = useState(null);
-  // `degradado` = Realtime dejó de entregar (canal mudo > 12 s) o no hay red.
-  // La UI lo muestra; el polling y los deadlines del servidor siguen
-  // corrigiendo el estado solo, sin perder puntajes.
+  // `degradado` = hay una falla REAL de conexión: sin red, canal Realtime
+  // caído (`CHANNEL_ERROR`/`TIMED_OUT`/`CLOSED`) o REST fallando. NO se activa
+  // por "silencio": con el reloj por REST y los filtros por sala, no recibir
+  // eventos durante un rato es lo normal (nadie cambió nada).
   const [degradado, setDegradado] = useState(false);
   // La sala fue VERIFICADA contra la base (recargar completó): con esto se
   // distingue "todavía cargando" (sala null transitorio) de "sala inexistente".
@@ -84,12 +85,20 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   const [offsetReloj, setOffsetReloj] = useState(0);
 
   const canalRef = useRef(null);
+  // Momento en que el canal vigente quedó `joined` (0 si no está operativo).
+  // El vigilante usa ESTA marca (no el tráfico) para detectar un canal caído.
+  const canalListoRef = useRef(0);
   // Emitter local de eventos broadcast para la UI (estable entre renders).
   const emisor = useMemo(() => crearEmisor(), []);
   const tokenRef = useRef(null);
   const esAnfitrionRef = useRef(false);
   const trackeadoRef = useRef(false);
-  const ultimoEventoRef = useRef(0);
+  // Última PRUEBA REAL de salud: evento recibido, REST exitoso o canal
+  // `joined`. El aviso de conexión se basa en esto + el estado del canal,
+  // nunca en la ausencia de eventos.
+  const ultimaSaludRef = useRef(0);
+  // Cooldown de reconstrucción del canal (evita tormentas de reconexión).
+  const ultimoReintentoRef = useRef(0);
   // Reloj adaptativo: se calibra al empezar la partida (una muestra) y se
   // refresca cada 5 minutos. `ultimaRespuestaRef` evita recalibrar de nuevo en
   // partidas consecutivas dentro de la misma sesión.
@@ -149,6 +158,12 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     }
   }, [idSala]);
 
+  // Prueba de salud: limpia el aviso de conexión y sella el momento.
+  const marcarSalud = useCallback(() => {
+    ultimaSaludRef.current = Date.now();
+    setDegradado(false);
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Carga inicial / re-sincronización (polling de respaldo cada 3 s: los
   // relojes son por deadline y los eventos de broadcast dan el golpe seco,
@@ -171,18 +186,23 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     if (peticion !== peticionRef.current) return null;
     if (resSala.error || resJugadores.error) {
       setError(resSala.error || resJugadores.error);
+      // REST también falló: hay una falla real de conexión.
+      setDegradado(true);
       setListo(true);
       setVerificada(true);
       return null;
     }
-    // Éxito: limpiar un error transitorio y recién ahí pisar el estado.
+    // Éxito: limpiar un error transitorio, marcar salud y recién ahí pisar el
+    // estado. Un REST exitoso prueba que la conexión está bien aunque no
+    // haya llegado ningún evento de Realtime.
     setError(null);
+    marcarSalud();
     setSala(resSala.data);
     setJugadores(ordenarJugadores(resJugadores.data || []));
     setListo(true);
     setVerificada(true);
     return { sala: resSala.data, jugadores: ordenarJugadores(resJugadores.data || []) };
-  }, [idSala]);
+  }, [idSala, marcarSalud]);
 
   // ---------------------------------------------------------------------------
   // Presencia: track del propio cliente
@@ -255,7 +275,8 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
   useEffect(() => {
     if (!idSala) return;
 
-    ultimoEventoRef.current = Date.now();
+    ultimaSaludRef.current = Date.now();
+    canalListoRef.current = Date.now(); // margen para el join inicial
     // IIFE async: la carga inicial setea estado recién después del await
     // (evita el setState sincrónico que marca react/set-state-in-effect).
     (async () => {
@@ -268,25 +289,18 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
     // `jugadores` usa REPLICA IDENTITY FULL (migración 20) para que los
     // DELETE también matcheen el filtro. Igual se filtra en el cliente por
     // robustez, y el vigilante re-sincroniza si el canal queda mudo.
-    const marcarEvento = () => {
-      ultimoEventoRef.current = Date.now();
-      setDegradado(false);
-    };
-    // Cambio de estado de verdad: alimenta al vigilante Y pausa el polling.
+    // Cualquier evento de Realtime es una prueba de salud.
+    const marcarEvento = () => marcarSalud();
+    // Cambio de estado de verdad: prueba de salud Y pausa el polling.
     const marcarEstado = () => {
-      const ahora = Date.now();
-      ultimoEventoRef.current = ahora;
-      ultimoEstadoRef.current = ahora;
-      setDegradado(false);
+      ultimoEstadoRef.current = Date.now();
+      marcarSalud();
     };
 
     // Sin red: aviso inmediato. Al volver, la reconexión del canal y el
     // polling re-sincronizan todo (los puntajes viven en el servidor).
     const alDesconectar = () => setDegradado(true);
-    const alReconectar = () => {
-      ultimoEventoRef.current = Date.now();
-      setDegradado(false);
-    };
+    const alReconectar = () => marcarSalud();
     window.addEventListener('offline', alDesconectar);
     window.addEventListener('online', alReconectar);
 
@@ -371,6 +385,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             setListo(true);
+            canalListoRef.current = Date.now();
             // Canal nuevo: hay que volver a publicar la presencia (el ref
             // quedaba en true del canal anterior y `trackear` retornaba antes).
             trackeadoRef.current = false;
@@ -378,9 +393,20 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
             ultimaRespuestaRef.current = 0;
             calibrarPendienteRef.current = true;
             ultimoPingRef.current = 0;
+            marcarSalud();
             await trackear();
             sincronizarPresencia();
             sincronizarReloj();
+          } else if (
+            (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') &&
+            !desmontado &&
+            canalRef.current === canal
+          ) {
+            // Falla REAL del canal vigente. El cierre intencional del canal
+            // viejo durante una reconexión (o el desmontaje) no cuenta: por
+            // eso se compara con el canal actual.
+            canalListoRef.current = 0;
+            setDegradado(true);
           }
         });
 
@@ -402,21 +428,22 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       sincronizarReloj();
     }, 1500);
 
-    // VIGILANTE: si el canal queda mudo con la partida activa, re-sincroniza
-    // el estado y reconstruye el canal (Realtime puede dejar de entregar).
+    // VIGILANTE: su único trabajo es detectar un CANAL CAÍDO y reconstruirlo.
+    // NO usa el silencio como señal: desde que el reloj va por REST y los
+    // canales filtran por sala, no recibir eventos durante un rato es normal
+    // (nadie cambió nada). Se basa en el estado real del canal + una marca de
+    // cuándo quedó `joined`, con margen y cooldown para no generar tormentas.
     const vigilante = setInterval(() => {
-      const silencio = Date.now() - ultimoEventoRef.current;
-      if (silencio > 12000) {
-        ultimoEventoRef.current = Date.now();
-        setDegradado(true);
-        recargar();
-        if (esAnfitrionRef.current) return; // el anfitrión reacciona al estado poll
-        // Con partida activa reconstruimos el canal para no perder el juego.
-        const salaActual = salaRef.current;
-        if (salaActual && (salaActual.estado === 'jugando' || salaActual.estado === 'pausado')) {
-          conectar();
-        }
-      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      const canal = canalRef.current;
+      if (canal && canal.state === 'joined') return; // sano: no se toca
+      const desdeListo = Date.now() - (canalListoRef.current || 0);
+      if (desdeListo < 10000) return; // montaje o reconexión en curso
+      if (Date.now() - ultimoReintentoRef.current < 30000) return; // cooldown
+      ultimoReintentoRef.current = Date.now();
+      setDegradado(true);
+      recargar();
+      conectar();
     }, 5000);
 
     // POLLING base de respaldo: cada 3 s en partida (barato e infalible),
@@ -443,7 +470,7 @@ export function useSalaRealtime(idSala, { sesionJugador = null, esAnfitrion = fa
       trackeadoRef.current = false;
       setOnline(new Set());
     };
-  }, [idSala, recargar, sincronizarPresencia, trackear, sincronizarReloj, emisor, limpiarCanalesDeSala]);
+  }, [idSala, recargar, sincronizarPresencia, trackear, sincronizarReloj, marcarSalud, emisor, limpiarCanalesDeSala]);
 
   // Re-trackear cuando el jugador consigue su sesión (join tardío).
   useEffect(() => {
