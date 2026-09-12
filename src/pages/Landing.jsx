@@ -103,11 +103,12 @@ export default function Landing() {
           if (!vigente) return;
           if (perfil?.existe) {
             setPerfilReconocido(perfil);
+            // Privacidad: el servidor solo devuelve nombre y nickname. El
+            // apellido/celular los vuelve a completar el propio jugador (así
+            // nadie puede cosechar PII probando correos ajenos).
             setForm((f) => ({
               ...f,
               nombre: f.nombre.trim() || perfil.nombre || '',
-              apellido: f.apellido.trim() || perfil.apellido || '',
-              telefono: f.telefono.trim() || perfil.telefono || '',
             }));
           } else {
             setPerfilReconocido(null);
