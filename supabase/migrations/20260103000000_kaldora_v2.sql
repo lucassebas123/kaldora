@@ -1524,6 +1524,10 @@ create policy "jugadores: lectura pública" on public.jugadores
 revoke all privileges on public.preguntas from anon, authenticated;
 grant select (id, letra, pregunta) on public.preguntas to anon;
 grant select (id, letra, pregunta, respuesta) on public.preguntas to authenticated;
+-- Idempotencia de recuperación: la tabla `preguntas` sobrevive a la limpieza v1
+-- y su política se llama igual. `drop ... if exists` permite reconstruir la
+-- base desde cero (v1 + v2) sin romper el replay histórico.
+drop policy if exists "preguntas: lectura pública" on public.preguntas;
 create policy "preguntas: lectura pública" on public.preguntas
   for select to anon, authenticated using (true);
 
