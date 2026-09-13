@@ -70,23 +70,21 @@ export default function Podio({
       <ConfetiCSS />
 
       {/* Foco giratorio detrás del podio (rayos de luz del ganador).
-          Se omite en gama baja: es el efecto más caro de GPU. */}
+          Se omite en gama baja: es el efecto más caro de GPU.
+          NO lleva contenedor con overflow-hidden: recortaba los rayos en
+          notebook/PC (donde GAMA_BAJA es false) y el festejo se veía distinto.
+          El desborde horizontal no ocurre: el HTML global tiene
+          `overflow-x: clip` y el foco (416-544 px) solo se renderiza en
+          pantallas > 480 px, donde entra completo. */}
       {!GAMA_BAJA && (
-        // El recortador evita que el foco (416 px) ensanche la página en
-        // celulares: antes sobresalía 13-48 px y obligaba a alejar el zoom.
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-        >
-          <div className="absolute -top-28 left-1/2 h-[26rem] w-[26rem] -translate-x-1/2 opacity-40 sm:h-[34rem] sm:w-[34rem]">
-            <div
-              className="animate-girar-lento h-full w-full rounded-full will-change-transform"
-              style={{
-                background:
-                  'conic-gradient(from 0deg, transparent 0deg, rgba(242,183,5,0.4) 18deg, transparent 40deg, rgba(217,70,239,0.3) 95deg, transparent 115deg, rgba(56,189,248,0.3) 180deg, transparent 205deg, rgba(242,183,5,0.4) 260deg, transparent 285deg, rgba(217,70,239,0.3) 340deg, transparent 360deg)',
-              }}
-            />
-          </div>
+        <div className="pointer-events-none absolute -top-28 left-1/2 -z-10 h-[26rem] w-[26rem] -translate-x-1/2 opacity-40 sm:h-[34rem] sm:w-[34rem]">
+          <div
+            className="animate-girar-lento h-full w-full rounded-full will-change-transform"
+            style={{
+              background:
+                'conic-gradient(from 0deg, transparent 0deg, rgba(242,183,5,0.4) 18deg, transparent 40deg, rgba(217,70,239,0.3) 95deg, transparent 115deg, rgba(56,189,248,0.3) 180deg, transparent 205deg, rgba(242,183,5,0.4) 260deg, transparent 285deg, rgba(217,70,239,0.3) 340deg, transparent 360deg)',
+            }}
+          />
         </div>
       )}
 

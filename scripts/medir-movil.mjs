@@ -24,6 +24,7 @@ const VIEWPORTS = [
   [320, 568, 'iPhone SE'],
   [360, 640, 'Android chico'],
   [390, 844, 'iPhone 14'],
+  [1366, 768, 'Notebook'],
 ];
 
 const api = createClient(env.url, env.anon, {
@@ -107,7 +108,32 @@ async function medir(nombre, path, { sesion = null } = {}) {
       const inputs = [...document.querySelectorAll('input,textarea')]
         .filter((e) => e.offsetParent !== null && e.type !== 'hidden' && e.type !== 'file')
         .map((e) => parseFloat(getComputedStyle(e).fontSize));
-      return { vw, scrollWidth: document.documentElement.scrollWidth, malos, inputs };
+      // ¿El foco festivo del podio está recortado por un ancestro con
+      // overflow hidden/clip? (Fue el bug de la pantalla de victoria).
+      let foco = null;
+      const focoEl = document.querySelector('.animate-girar-lento');
+      if (focoEl) {
+        const b = focoEl.getBoundingClientRect();
+        let recortado = false;
+        // Se excluyen html/body: su `overflow-x: clip` es la red de seguridad
+        // global, no un recorte visible del festejo.
+        for (
+          let a = focoEl.parentElement;
+          a && a !== document.body && a !== document.documentElement;
+          a = a.parentElement
+        ) {
+          const cs = getComputedStyle(a);
+          if (/(hidden|clip)/.test(cs.overflow + cs.overflowX + cs.overflowY)) {
+            const ab = a.getBoundingClientRect();
+            if (b.left < ab.left - 1 || b.right > ab.right + 1 || b.top < ab.top - 1 || b.bottom > ab.bottom + 1) {
+              recortado = true;
+              break;
+            }
+          }
+        }
+        foco = { ancho: Math.round(b.width), recortado };
+      }
+      return { vw, scrollWidth: document.documentElement.scrollWidth, malos, inputs, foco };
     });
     const overflow = r.scrollWidth > r.vw + 1;
     console.log(
@@ -122,12 +148,21 @@ async function medir(nombre, path, { sesion = null } = {}) {
         `     inputs: ${r.inputs.join(',')}${chicos.length ? `  ← ${chicos.length} con <16px (auto-zoom iOS)` : '  ✓ todos ≥16px'}`
       );
     }
+    if (r.foco) {
+      console.log(
+        `     foco festivo: ${r.foco.ancho}px · ${r.foco.recortado ? 'RECORTADO por un ancestro ✗' : 'completo ✓'}`
+      );
+    }
     await ctx.close();
   }
 }
 
 await medir('Landing (registro)', `/?sala=${sala.codigo}`);
 await medir('Panel admin (lobby)', `/admin/sala/${sala.id}`, { sesion: tokenHost.session });
+// Pantalla de victoria (podio): aquí vive el foco festivo que se recortaba
+// en notebook/PC (donde GAMA_BAJA es false y el efecto sí se renderiza).
+await api.rpc('terminar_partida', { p_sala: sala.id });
+await medir('Podio (victoria)', `/admin/sala/${sala.id}`, { sesion: tokenHost.session });
 
 await browser.close();
 
