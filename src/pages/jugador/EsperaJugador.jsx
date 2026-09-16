@@ -5,10 +5,22 @@
 // rotativos para que la espera entretenga.
 
 import React, { useEffect, useState } from 'react';
-import { Check, Share2, Users, Sparkles } from 'lucide-react';
+import { Check, Share2, Users, Sparkles, ShieldCheck, MessageCircle } from 'lucide-react';
 import AvatarChip from '../../components/AvatarChip';
+import { api } from '../../api/kaldoraApi';
 import { JUEGOS } from '../../game/constantes';
 import { GAMA_BAJA } from '../../utils/rendimiento';
+
+// Número global de respaldo (si la sala no configuró el suyo). El anfitrión
+// lo define por sala desde la vista privada de verificaciones.
+const WHATSAPP_GLOBAL = import.meta.env.VITE_WHATSAPP_ANFITRION || '';
+
+// wa.me necesita solo dígitos con código de país (sin +, espacios ni guiones).
+function enlaceWhatsapp(numero, mensaje) {
+  const digitos = String(numero || '').replace(/\D/g, '');
+  if (!digitos) return null;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(mensaje)}`;
+}
 
 const TIPS = {
   rosco: [
@@ -63,6 +75,31 @@ function TipsRotativos({ juegoActual }) {
 export default function EsperaJugador({ jugadores, online, sesion, jugadorPropio, juegoActual }) {
   const juego = juegoActual ? JUEGOS[juegoActual] : null;
   const [copiado, setCopiado] = useState(false);
+
+  // Verificación de WhatsApp (gratis, la confirma el anfitrión desde su celular).
+  const verificado = Boolean(jugadorPropio?.verificado);
+  const [verificacion, setVerificacion] = useState(null);
+  useEffect(() => {
+    if (verificado || !sesion?.token) return undefined;
+    let vigente = true;
+    api
+      .estadoVerificacion()
+      .then((estado) => vigente && setVerificacion(estado))
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, [verificado, sesion?.token]);
+
+  const whatsapp = verificacion?.whatsapp || WHATSAPP_GLOBAL;
+  const codigo = verificacion?.codigo || null;
+  const urlWhatsapp =
+    codigo && whatsapp
+      ? enlaceWhatsapp(
+          whatsapp,
+          `¡Hola! Soy ${sesion.nickname}. Mi código de verificación Kaldora es ${codigo}.`
+        )
+      : null;
 
   async function compartir() {
     const url = `${window.location.origin}/?sala=${sesion.codigo}`;
@@ -132,6 +169,40 @@ export default function EsperaJugador({ jugadores, online, sesion, jugadorPropio
           {copiado ? '¡Copiado!' : 'Compartir'}
         </button>
       </div>
+
+      {/* Verificación de WhatsApp (PII solo para el anfitrión, no se proyecta) */}
+      {jugadorPropio && (verificado ? (
+        <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3">
+          <ShieldCheck size={18} className="shrink-0 text-emerald-300" />
+          <div>
+            <p className="text-sm font-black text-emerald-200">WhatsApp verificado</p>
+            <p className="text-[11px] text-emerald-200/70">Ya estás listo para jugar.</p>
+          </div>
+        </div>
+      ) : urlWhatsapp ? (
+        <div className="rounded-2xl border border-sky-400/30 bg-sky-400/[0.07] px-4 py-3.5">
+          <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-sky-200">
+            <MessageCircle size={13} /> Verificá tu WhatsApp
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[#B8AFD9]">
+            Mandale el código <span className="font-black text-white">{codigo}</span> al anfitrión desde TU
+            WhatsApp: él confirma y quedás verificado. Se envía desde el mismo número que registraste.
+          </p>
+          <a
+            href={urlWhatsapp}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-green-500 font-extrabold text-[#06281A] transition hover:brightness-110 active:scale-[0.98]"
+          >
+            <MessageCircle size={18} />
+            Enviar por WhatsApp
+          </a>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[11px] leading-relaxed text-[#8B80B3]">
+          El anfitrión todavía no configuró el WhatsApp de verificación de esta sala.
+        </div>
+      ))}
 
       {/* Juego que se viene + reglas */}
       {juego && (

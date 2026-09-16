@@ -32,7 +32,7 @@ verificar(
   'rosco: reloj total de 300 s por defecto (duplicado)',
   ROSCO.SEGUNDOS_DEFECTO === 300 && ROSCO.DURACIONES[0] === 240
 );
-verificar('trivia: 1000 base / 20 s', TRIVIA.PUNTOS_BASE === 1000 && TRIVIA.DURACION_MS === 20000);
+verificar('trivia: 1000 base / 10 s', TRIVIA.PUNTOS_BASE === 1000 && TRIVIA.DURACION_MS === 10000);
 verificar('basta: 10 s letales, única 10 / repetida 5', BASTA.SEGUNDOS_LETALES === 10 && BASTA.PUNTOS_UNICA === 10 && BASTA.PUNTOS_REPETIDA === 5);
 verificar('supervivencia: +25 por acierto', SUPERVIVENCIA.PUNTOS_ACIERTO === 25);
 

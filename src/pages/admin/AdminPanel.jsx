@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Plus, LogOut, Play, Trash2, DoorOpen, Gamepad2, Users2, Crown, UserCog, ExternalLink, MinusCircle, ArrowUpCircle } from 'lucide-react';
+import { Loader2, Plus, LogOut, Play, Trash2, DoorOpen, Gamepad2, Users2, Crown, UserCog, ExternalLink, MinusCircle, ArrowUpCircle, ShieldCheck } from 'lucide-react';
 import FondoAnimado from '../../components/FondoAnimado';
 import BotonMusica from '../../components/BotonMusica';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
@@ -158,6 +158,17 @@ export default function AdminPanel() {
                       )}
                     </span>
                     <span className="flex items-center gap-2">
+                      {/* Vista PRIVADA de verificación (celular del anfitrión). */}
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/admin/sala/${sala.id}/verificaciones`);
+                        }}
+                        title="Verificación de WhatsApp (vista privada)"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 hover:bg-emerald-500/20 hover:text-emerald-300 transition cursor-pointer"
+                      >
+                        <ShieldCheck size={16} />
+                      </span>
                       <span className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-white/5 group-hover:bg-white/10 transition">
                         <DoorOpen size={16} className="text-[#B8AFD9]" />
                       </span>

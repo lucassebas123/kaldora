@@ -3,12 +3,14 @@
 // TEST 3 — Verificación E2E contra Supabase REAL (proyecto remoto).
 // Simula el flujo completo de la plataforma:
 //   1. Anfitrión: signup + login (Supabase Auth) + crear sala
-//   2. Jugadores: unirse con PIN (anon + token)
-//   3. ROSCO: iniciar, responder bien/mal (validación server-side), 27 letras
-//   4. TRIVIA: ronda con base 1000 decreciente, rachas
+//   2. Jugadores: unirse con PIN (anon + token) + login multicanal
+//   2c. Verificación de WhatsApp: código pendiente → el host confirma
+//   3. ROSCO: iniciar, responder bien/mal (validación server-side), 27 letras,
+//      pasapalabra con la MISMA pregunta al volver
+//   4. TRIVIA: ronda de 10 s con base 1000 decreciente, rachas
 //   5. BASTA: palabras, deadline letal, únicas vs repetidas
 //   6. SUPERVIVENCIA: V/F con eliminación súbita
-//   7. Seguridad: anon NO puede crear salas, ni leer respuestas/índices,
+//   7. Seguridad: anon NO puede crear salas, ni leer respuestas/índices/PII,
 //      ni escribir tablas; Realtime entrega cambios de sala.
 //
 // Uso: node scripts/test-e2e.mjs   (lee .env)
@@ -174,6 +176,63 @@ const anonPIIMC = await anon.from('registros_jugadores').select('pin_jugador').l
 verificar('SEGURIDAD: anon NO puede leer PINs de jugadores', !!anonPIIMC.error || (anonPIIMC.data || []).length === 0);
 await host.rpc('borrar_sala', { p_sala: salaMC.id });
 
+// =============================================================================
+console.log('\n═══ 2c. VERIFICACIÓN DE WHATSAPP (gratis, la confirma el anfitrión) ═══');
+// =============================================================================
+const { data: salaVerif } = await host.rpc('crear_sala');
+verificar('sala de verificación creada', /^\d{6}$/.test(salaVerif?.codigo || ''));
+
+const numMalo = await host.rpc('actualizar_contacto_whatsapp', { p_sala: salaVerif.id, p_whatsapp: 'no-es-numero!' });
+verificar('WhatsApp de sala inválido rechazado', !!numMalo.error);
+
+const numVerif = await host.rpc('actualizar_contacto_whatsapp', { p_sala: salaVerif.id, p_whatsapp: '+54 9 11 5555-9999' });
+verificar('el anfitrión configura el WhatsApp de la sala',
+  !numVerif.error && numVerif.data?.whatsapp === '+54 9 11 5555-9999');
+
+const DATOS_V = {
+  p_nombre: 'Vera',
+  p_apellido: 'Ifi',
+  p_telefono: `+54 9 11 4444-${String(Date.now()).slice(-4)}`,
+  p_correo: `verif.${MARCA_MC}@example.com`,
+};
+const regV = await j1.rpc('unirse_sala', {
+  p_codigo: salaVerif.codigo, p_nickname: 'V_Prueba', p_icono: 'Shield', p_color: 'bg-green-500', ...DATOS_V,
+});
+verificar('registro nuevo devuelve código de 6 dígitos + WhatsApp de la sala (pendiente)',
+  /^[0-9]{6}$/.test(regV.data?.codigoVerificacion || '')
+  && regV.data?.whatsapp === '+54 9 11 5555-9999'
+  && regV.data?.verificado === false);
+
+const estV1 = await j1.rpc('estado_verificacion', { p_token: regV.data.token });
+verificar('el jugador ve su código pendiente y el WhatsApp',
+  estV1.data?.verificado === false
+  && /^[0-9]{6}$/.test(estV1.data?.codigo || '')
+  && Boolean(estV1.data?.whatsapp));
+
+const pendAnon = await anon.rpc('verificaciones_pendientes', { p_sala: salaVerif.id });
+verificar('SEGURIDAD: anon NO puede leer los pendientes (PII)', !!pendAnon.error);
+
+const pendHost = await host.rpc('verificaciones_pendientes', { p_sala: salaVerif.id });
+const pend = (pendHost.data?.pendientes || []).find((p) => p.idJugador === regV.data.idJugador);
+verificar('el anfitrión ve al pendiente con celular y código',
+  !pendHost.error && pend?.codigo === regV.data.codigoVerificacion && pend?.telefono === DATOS_V.p_telefono);
+
+const confirm = await host.rpc('confirmar_verificacion', { p_sala: salaVerif.id, p_jugador: regV.data.idJugador });
+verificar('el anfitrión confirma la verificación', !confirm.error);
+
+const estV2 = await j1.rpc('estado_verificacion', { p_token: regV.data.token });
+verificar('el jugador queda verificado y sin código pendiente',
+  estV2.data?.verificado === true && !estV2.data?.codigo);
+
+const { data: filaV } = await anon.from('jugadores').select('verificado').eq('id', regV.data.idJugador).single();
+verificar('la columna pública `verificado` viaja a la TV (sin PII)', filaV?.verificado === true);
+
+// Reingreso: la verificación se hereda (no se pide de nuevo).
+const reV = await j2.rpc('entrar_con_identificador', { p_codigo: salaVerif.codigo, p_identificador: DATOS_V.p_correo });
+verificar('login de una cuenta verificada entra como verificada', !reV.error && reV.data?.verificado === true);
+
+await host.rpc('borrar_sala', { p_sala: salaVerif.id });
+
 const anonCrea = await anon.rpc('crear_sala');
 verificar('SEGURIDAD: anon NO puede crear salas', !!anonCrea.error);
 
@@ -226,20 +285,38 @@ verificar('J1 suma 2700 puntos (+100 × 27)', puntosJ1 === 2700);
 const finJ1 = await j1.rpc('rosco_estado', { p_token: unido1.data.token });
 verificar('rosco de J1 marcado terminado', finJ1.data?.rosco?.t === true);
 
-// J2: PASAPALABRA en A, luego errores en B..Z; al terminar la pasada el
-// ciclo vuelve SOLO por la pendiente (A) respetando el orden circular.
+// J2: PASAPALABRA en A y B; al volver el ciclo, la pregunta de cada letra
+// debe ser LA MISMA (regresión: antes se re-sorteaba con order by random()).
+const estadoJ2Antes = await j2.rpc('rosco_estado', { p_token: unido2.data.token });
+const qA = estadoJ2Antes.data?.rosco?.q;
 const pasoJ2 = await j2.rpc('rosco_pasar', { p_token: unido2.data.token });
 verificar('pasapalabra en A: sin puntos y avanza a B', !pasoJ2.error && pasoJ2.data?.letra === 'B');
+const estadoJ2B = await j2.rpc('rosco_estado', { p_token: unido2.data.token });
+const qB = estadoJ2B.data?.rosco?.q;
+const pasoJ2b = await j2.rpc('rosco_pasar', { p_token: unido2.data.token });
+verificar('pasapalabra en B: avanza a C', !pasoJ2b.error && pasoJ2b.data?.letra === 'C');
 void letraJ1; void respuestaDeLetra;
 
 let volvioPorA = false;
+let qAEstable = null;
+let qBEstable = null;
 for (let i = 0; i < 30; i++) {
   const r = await j2.rpc('rosco_enviar', { p_token: unido2.data.token, p_respuesta: 'zzzz-nada' });
   if (r.error) { console.log('   error inesperado J2:', r.error.message); break; }
-  if (r.data.letra === 'A') volvioPorA = true; // regresó por la pasapalabra
+  if (r.data.letra === 'A') {
+    volvioPorA = true; // regresó por la pasapalabra
+    const est = await j2.rpc('rosco_estado', { p_token: unido2.data.token });
+    qAEstable = est.data?.rosco?.q;
+  }
+  if (r.data.letra === 'B') {
+    const est = await j2.rpc('rosco_estado', { p_token: unido2.data.token });
+    qBEstable = est.data?.rosco?.q;
+  }
   if (r.data.terminado) break;
 }
-verificar('ciclo circular: después de la Z vuelve por la pendiente A', volvioPorA === true);
+verificar('ciclo circular: después de la Z vuelve por las pendientes A y B', volvioPorA === true);
+verificar('la pregunta de la letra pasada NO cambia al volver (A)', Boolean(qA) && qAEstable === qA);
+verificar('la pregunta de la letra pasada NO cambia al volver (B)', Boolean(qB) && qBEstable === qB);
 const finJ2 = await j2.rpc('rosco_estado', { p_token: unido2.data.token });
 verificar('rosco de J2 terminado (no quedan pendientes)', finJ2.data?.rosco?.t === true);
 const puntosJ2 = (await anon.from('jugadores').select('puntos').eq('id', unido2.data.idJugador).single()).data.puntos;
@@ -253,10 +330,11 @@ await host.rpc('volver_al_lobby', { p_sala: sala.id });
 console.log('\n═══ 4. TRIVIA DE VELOCIDAD (1000 base, rachas) ═══');
 // =============================================================================
 await host.rpc('seleccionar_juego', { p_sala: sala.id, p_juego: 'trivia' });
-const sig = await host.rpc('trivia_siguiente', { p_sala: sala.id, p_duracion_ms: 20000 });
+const sig = await host.rpc('trivia_siguiente', { p_sala: sala.id });
 verificar('trivia_siguiente OK', !sig.error);
 
 const { data: salaTrivia } = await anon.from('salas').select('juego').eq('id', sala.id).single();
+verificar('trivia: duración por defecto 10 s', salaTrivia?.juego?.duracion_ms === 10000);
 const { data: preguntaTAnon, error: ePregTAnon } = await anon
   .from('preguntas_trivia').select('id, pregunta, opciones').eq('id', salaTrivia.juego.pregunta_id).single();
 verificar('anon ve pregunta + opciones', !ePregTAnon && Boolean(preguntaTAnon?.pregunta) && Array.isArray(preguntaTAnon?.opciones));
@@ -298,7 +376,9 @@ const cats = salaBasta.juego.categorias;
 const letraBasta = salaBasta.juego.letra;
 
 // J1: completa 5 palabras (alguna compartida con J2), declara basta.
-for (const c of cats) await j1.rpc('basta_enviar', { p_token: unido1.data.token, p_id_categoria: c, p_texto: `Palabra${letraBasta}` });
+// Prefijo "Kaldo...Test" (inexistente en el diccionario) para no depender de
+// que la letra sorteada no forme una palabra real ("PalabraS" = "palabras").
+for (const c of cats) await j1.rpc('basta_enviar', { p_token: unido1.data.token, p_id_categoria: c, p_texto: `Kaldo${letraBasta}Test` });
 const decl1 = await j1.rpc('basta_declarar_completo', { p_token: unido1.data.token });
 verificar('J1 completa 5 y dispara la cuenta letal', !decl1.error && decl1.data?.soyPrimero === true);
 
@@ -315,7 +395,7 @@ const tieneLexico = (id) => Boolean(catsInfo?.find((c) => c.id === id)?.clave_le
 const PALABRAS_REALES = { A:['asado'], B:['bondi'], C:['cine'], D:['dado'], E:['empanada'], F:['futbol'], G:['gato'], H:['helado'], I:['iguana'], J:['jirafa'], K:['karate'], L:['limon'], M:['mate'], N:['naranja'], 'Ñ':['nandu'], O:['oso'], P:['piba'], Q:['queso'], R:['raton'], S:['sol'], T:['tango'], U:['uva'], V:['vaca'], W:['whisky'], X:['xilofon'], Y:['yerba'], Z:['zapato'] };
 const real = (PALABRAS_REALES[letraBasta] || ['perro'])[0];
 
-await j2.rpc('basta_enviar', { p_token: unido2.data.token, p_id_categoria: cats[0], p_texto: `palabra${letraBasta.toLowerCase()} ` }); // repetida de J1
+await j2.rpc('basta_enviar', { p_token: unido2.data.token, p_id_categoria: cats[0], p_texto: `kaldo${letraBasta.toLowerCase()}test ` }); // repetida de J1
 await j2.rpc('basta_enviar', { p_token: unido2.data.token, p_id_categoria: cats[1], p_texto: real }); // existe en diccionario
 await j2.rpc('basta_enviar', { p_token: unido2.data.token, p_id_categoria: cats[2], p_texto: `Zz${letraBasta}qq` }); // INVENTADA
 await j2.rpc('basta_enviar', { p_token: unido2.data.token, p_id_categoria: cats[3], p_texto: `Otra${letraBasta}` });
@@ -336,7 +416,12 @@ const inventada = resJ2.find((r) => r.id_categoria === cats[2]);
 // El diccionario es ASESOR: marca (existe=false) pero NO quita puntos.
 // El host decide: valida=true puntúa (única 10 / repetida 5); tachada = 0.
 verificar('repetida de J1: repetida +5 y no única', repJ2?.puntos === 5 && repJ2?.unico === false);
-verificar('palabra real única: única +10 y avisada como existente', uniJ2?.unico === true && uniJ2?.puntos === 10 && uniJ2?.existe === true);
+// El diccionario no tiene palabras con K/W y las Ñ quedan sin acento (unaccent
+// las mapea a N): esas letras no pueden "existir" y el aviso se espera false.
+const letraSinDiccionario = ['K', 'W', 'Ñ'].includes(letraBasta);
+verificar('palabra real única: única +10 y avisada como existente',
+  uniJ2?.unico === true && uniJ2?.puntos === 10
+  && uniJ2?.existe === !letraSinDiccionario);
 verificar('palabra INVENTADA: aviso existe=false pero puntúa como única (host manda)', inventada?.existe === false && inventada?.unico === true && inventada?.puntos === 10);
 verificar('J1: 5 inventadas sin diccionario puntúan igual (45: 1 repetida + 4 únicas)', totalJ1 === 45 && resJ1.every((r) => r.existe === false));
 console.log(`     categoría de la real: "${nombreDe(cats[1])}" (léxico: ${tieneLexico(cats[1]) ? 'sí' : 'abierto'}) · J1: ${totalJ1} · J2: ${totalJ2}`);

@@ -141,6 +141,9 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 - [ ] `npm run keepalive` (proyecto despierto).
 - [ ] `npm run backup` (snapshot por si hay que restaurar).
 - [ ] `ENTORNO=staging npm run verificar` en verde.
+- [ ] En cada sala: cargar el **WhatsApp de verificación** (vista privada
+      `/admin/sala/:id/verificaciones` en el celular del anfitrión, o
+      `VITE_WHATSAPP_ANFITRION` como respaldo global).
 - [ ] Render/PC del host con la sala creada, batería/enchufe y la pestaña
       sin dormir.
 - [ ] Router del lugar: idealmente red 5 GHz, host por cable si se puede.
@@ -149,6 +152,8 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 - [ ] Dashboard de Supabase → **Reports → Realtime**: mirar conexiones y
       mensajes/s. Si aparece un pico sostenido cerca de 100/s, bajar el ritmo
       de rondas.
+- [ ] Verificaciones: los jugadores mandan su código por WhatsApp; confirmar
+      desde la vista privada del celular (la TV solo muestra contador y ✅).
 - [ ] Si el banner "Reconectando…" aparece en varios celulares: los puntajes
       están a salvo en el servidor; esperar unos segundos o recargar.
 - [ ] No crear/borrar salas de prueba durante el evento.
@@ -188,5 +193,5 @@ ENTORNO=staging npm run test:carga   # 3 salas × 20 · métricas de Realtime
 `npm run verificar` encadena lint + lógica + importador + seguridad + caos +
 e2e + concurrencia (la carga se corre aparte por su duración).
 
-Resultados de referencia (2026-09-12, staging): lógica 17/17 · importador
-34/34 · seguridad 14/14 · caos 12/12 · e2e 79/79 · concurrencia 37/37.
+Resultados de referencia (2026-09-15, staging): lógica 17/17 · importador
+34/34 · seguridad 14/14 · caos 12/12 · e2e 94/94 · concurrencia 37/37.

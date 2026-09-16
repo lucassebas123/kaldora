@@ -125,7 +125,9 @@ await verificarSinOverflow(pagJugador, 'landing');
 await pagJugador.locator('input[placeholder^="Ej:"]').fill('PlaywrightPro');
 await pagJugador.locator('input[placeholder="Nombre"]').fill('Nora');
 await pagJugador.locator('input[placeholder="Apellido"]').fill('De Pruebas');
-await pagJugador.locator('input[placeholder="Celular"]').fill('1155550099');
+// Teléfono dinámico: un fijo se reusa entre corridas (la cuenta vieja ya
+// verificada se hereda y la vista privada queda sin pendientes que confirmar).
+await pagJugador.locator('input[placeholder="Celular"]').fill(`11${String(Date.now()).slice(-8)}`);
 await pagJugador.locator('input[placeholder="Correo"]').fill(`nora.${Date.now()}@example.com`);
 
 // Toggle: modo login oculta el registro y muestra el identificador único.
@@ -200,6 +202,76 @@ if (!pinEnPanel) console.log('    [debug admin]', (await pagHost.locator('body')
 if (pinEnPanel) await verificarSinOverflow(pagHost, 'panel-admin');
 
 // -----------------------------------------------------------------------------
+console.log('\n═══ 2b. Vista privada de verificaciones (PII: solo celular) ═══');
+// Acceso 1: botón "Verificaciones" del centro de control → modal con QR.
+await pagHost.getByRole('button', { name: 'Verificaciones' }).click();
+const modalVerif = await pagHost
+  .getByText(/Escaneá con tu celular/i)
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+const tieneQr = (await pagHost.locator('svg').count()) > 0;
+verificar('centro de control: el botón Verificaciones abre el modal con QR', modalVerif && tieneQr);
+if (modalVerif) {
+  await pagHost.getByRole('button', { name: /Abrir en este dispositivo/i }).click();
+}
+
+// El banner de privacidad es el marcador único de la vista privada (el botón
+// "Verificaciones" del panel también contiene esa palabra).
+const verifRender = await pagHost
+  .getByText(/Vista privada con datos personales/i)
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('vista privada de verificaciones renderiza (con aviso de privacidad)', verifRender);
+const pendienteVisible = await pagHost
+  .getByText('PlaywrightPro')
+  .first()
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('el jugador pendiente aparece en la lista privada', pendienteVisible);
+
+if (pendienteVisible) {
+  const botonConfirmar = pagHost.getByRole('button', { name: /Confirmar/i }).first();
+  const hayConfirmar = (await botonConfirmar.count()) > 0;
+  if (hayConfirmar) await botonConfirmar.click();
+  const quedoVerificado = await pagHost
+    .getByText(/¡Todos verificados!/i)
+    .waitFor({ timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+  verificar('confirmar la verificación deja la sala sin pendientes', hayConfirmar && quedoVerificado);
+}
+
+// Vuelve al centro de control: la TV solo refleja contador y tilde (sin PII).
+await pagHost.goto(`${BASE}/admin/sala/${sala.id}`, { waitUntil: 'domcontentloaded' });
+const contadorVerif = await pagHost
+  .getByText(/Verificados 1\/1/)
+  .waitFor({ timeout: 15000 })
+  .then(() => true)
+  .catch(() => false);
+verificar('la TV muestra el contador público 1/1 (sin datos personales)', contadorVerif);
+
+// Acceso 2: dashboard del anfitrión (botón escudo en la tarjeta de la sala).
+await pagHost.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+const escudo = pagHost.getByTitle('Verificación de WhatsApp (vista privada)').first();
+const escudoVisible = await escudo.waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
+verificar('dashboard: acceso directo a verificaciones por sala', escudoVisible);
+if (escudoVisible) {
+  await escudo.click();
+  const verifDesdeDash = await pagHost
+    .getByText(/Vista privada con datos personales/i)
+    .first()
+    .waitFor({ timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+  verificar('el botón del dashboard lleva a la vista privada', verifDesdeDash);
+}
+await pagHost.goto(`${BASE}/admin/sala/${sala.id}`, { waitUntil: 'domcontentloaded' });
+
+// -----------------------------------------------------------------------------
 console.log('\n═══ 3. Lanzar LOS 4 JUEGOS (aquí vivía la pantalla en blanco) ═══');
 const juegos = [
   { id: 'rosco', tarjeta: /El Rosco/, marcadorHost: /Rosco en curso/, marcadorJugador: /Pasar|Pasapalabra|Tu rosco|palabra/i },
@@ -236,6 +308,17 @@ for (const juego of juegos) {
   verificar(`[${juego.id}] panel del anfitrión renderiza (${juego.marcadorHost})`, hostOk);
   const textoHost = (await pagHost.locator('body').innerText()).trim();
   verificar(`[${juego.id}] admin sin pantalla en blanco`, textoHost.length > 100);
+
+  // La pantalla se PROYECTA: la respuesta correcta no puede estar visible
+  // mientras corre la ventana (los jugadores responderían mirándola).
+  if (juego.id === 'trivia') {
+    const correctaEnPantalla = await pagHost.getByText(/CORRECTA/i).count();
+    verificar('[trivia] la correcta NO se muestra en la proyección (ventana abierta)', correctaEnPantalla === 0);
+  }
+  if (juego.id === 'supervivencia') {
+    const verdadEnPantalla = await pagHost.getByText(/Verdad:/i).count();
+    verificar('[supervivencia] la verdad NO se muestra en la proyección (ventana abierta)', verdadEnPantalla === 0);
+  }
 
   const jugadorOk = await pagJugador.locator('body').getByText(juego.marcadorJugador).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
   verificar(`[${juego.id}] el celular del jugador muta al juego`, jugadorOk);

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from './hooks/useAdminAuth';
 import { supabase, HASH_INICIAL } from './supabaseClient';
 import AvisoActualizacion from './components/AvisoActualizacion';
@@ -13,6 +13,7 @@ const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AceptarInvitacion = lazy(() => import('./pages/admin/AceptarInvitacion'));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 const AdminSala = lazy(() => import('./pages/admin/AdminSala'));
+const VerificacionesSala = lazy(() => import('./pages/admin/VerificacionesSala'));
 
 // Tipo de auth que traía el link al arrancar (invite / recovery / null).
 const TIPO_AUTH = new URLSearchParams(HASH_INICIAL.replace(/^#/, '')).get('type') || '';
@@ -58,6 +59,7 @@ function RedirigirInvitacion() {
  */
 function RutaProtegida({ children }) {
   const { estado } = useAdminAuth();
+  const location = useLocation();
 
   if (estado === 'cargando') {
     return (
@@ -68,7 +70,9 @@ function RutaProtegida({ children }) {
     );
   }
   if (estado === 'fuera') {
-    return <Navigate to="/admin/login" replace />;
+    // Se guarda el destino para volver ahí después del login (por ejemplo, la
+    // vista privada de verificaciones abierta desde el celular del anfitrión).
+    return <Navigate to="/admin/login" state={{ from: location }} replace />;
   }
   return children;
 }
@@ -111,6 +115,15 @@ export default function App() {
             element={
               <RutaProtegida>
                 <AdminSala />
+              </RutaProtegida>
+            }
+          />
+          {/* Vista privada (celular del anfitrión): pendientes con PII. */}
+          <Route
+            path="/admin/sala/:id/verificaciones"
+            element={
+              <RutaProtegida>
+                <VerificacionesSala />
               </RutaProtegida>
             }
           />

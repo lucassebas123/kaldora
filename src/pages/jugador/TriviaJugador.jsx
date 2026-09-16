@@ -1,7 +1,7 @@
 // src/pages/jugador/TriviaJugador.jsx
 //
 // TRIVIA DE VELOCIDAD: una pregunta para todos; la base de 1000 pts se
-// derrite ms a ms durante 20 s (el servidor mide el tiempo y calcula el
+// derrite ms a ms durante 10 s (el servidor mide el tiempo y calcula el
 // puntaje). Rachas de 3+ multiplican x2, de 5+ x3.
 //
 // El anfitrión avanza la ronda; al llegar una pregunta nueva el componente

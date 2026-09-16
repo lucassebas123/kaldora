@@ -86,6 +86,10 @@ arquitectura, seguridad, herramientas y despliegue.
 /admin               -> Dashboard: crear/listar salas
 /admin/sala/:id      -> Centro de control: QR + PIN, selector de juego,
                         proyección + moderación por juego, podio/revancha
+/admin/sala/:id/verificaciones -> Vista PRIVADA (celular del anfitrión):
+                        pendientes de verificación de WhatsApp con PII.
+                        Se abre con el botón "Verificaciones" del centro de
+                        control (QR) o con el escudo de cada sala en /admin
 ```
 
 ## 4. El backend (Supabase) en detalle
@@ -94,8 +98,8 @@ arquitectura, seguridad, herramientas y despliegue.
 
 | Tabla | Qué guarda |
 | --- | --- |
-| `salas` | PIN de 6 dígitos único (`CHECK codigo ~ '^[0-9]{6}$'`), dueño (`id_anfitrion` → `auth.users`), estado (`en_espera/jugando/pausado/finalizado`), juego actual (enum `juego_tipo`) y `juego jsonb` con el estado volátil de la ronda (letra activa, pregunta, deadline, etc.). |
-| `jugadores` | Nickname único por sala (≤ 20, insensible a mayúsculas/tildes), avatar, color, **puntos ≥ 0**, racha, eliminado y (v3) `rosco jsonb` con el estado individual del rosco. **Sin secretos ni PII** (ver §4.5). |
+| `salas` | PIN de 6 dígitos único (`CHECK codigo ~ '^[0-9]{6}$'`), dueño (`id_anfitrion` → `auth.users`), estado (`en_espera/jugando/pausado/finalizado`), juego actual (enum `juego_tipo`) y `juego jsonb` con el estado volátil de la ronda (letra activa, pregunta, deadline, etc.). `contacto_whatsapp` (v5) es el número que recibe los códigos de verificación de esa sala (privado por columna: se entrega por RPC). |
+| `jugadores` | Nickname único por sala (≤ 20, insensible a mayúsculas/tildes), avatar, color, **puntos ≥ 0**, racha, eliminado y (v3) `rosco jsonb` con el estado individual del rosco (v5: incluye el mapa `p` de pregunta fija por letra). `verificado boolean` (v5) espeja la confirmación de WhatsApp para el badge/contador sin PII. **Sin secretos ni PII** (ver §4.5). |
 | `sesiones_jugador` | **Tabla 100 % privada**: token secreto de 16 bytes (`gen_random_bytes`) por jugador. Autentica cada acción. Sin RLS que la exponga y sin permisos para clientes. |
 | `preguntas` (rosco) | Banco A–Z: letra, pregunta, respuesta. |
 | `rosco_respuestas` | Auditoría: una respuesta por jugador y letra. |
@@ -104,7 +108,7 @@ arquitectura, seguridad, herramientas y despliegue.
 | `preguntas_supervivencia` / `supervivencia_respuestas` | Banco V/F y auditoría de rondas. |
 | `palabras` (v3) | Diccionario español + lunfardo argentino (**600k+ formas**, generado desde `an-array-of-spanish-words`, filtrado y deduplicado). |
 | `lexico_categorias` (v3) | Léxico por categoría (valida que la palabra "corresponda" a la categoría). |
-| `admins_autorizados`, `registros_jugadores` | Gestión de anfitriones (con roles) e **historial persistente** de datos de jugadores (nombre, apellido, teléfono, correo, `pin_jugador`) — sobrevive a la salida y al borrado de salas; una sola fila **vigente** por identidad alimenta el login multicanal. |
+| `admins_autorizados`, `registros_jugadores` | Gestión de anfitriones (con roles) e **historial persistente** de datos de jugadores (nombre, apellido, teléfono, correo, `pin_jugador`) — sobrevive a la salida y al borrado de salas; una sola fila **vigente** por identidad alimenta el login multicanal. v5: `codigo_verificacion` (6 dígitos, privado), `verificado` y `verificado_en` para la confirmación de WhatsApp. |
 
 ### 4.2 Identidades (2 mundos)
 
@@ -124,6 +128,15 @@ arquitectura, seguridad, herramientas y despliegue.
   únicos, case/dígitos-insensibles) y rota las anteriores como historial; así
   un correo tipeado mal no deja al jugador afuera (lo rescatan el celular o
   el PIN). `perfil_por_correo` sigue precargando datos en el registro.
+* **Verificación de WhatsApp** (v5, gratis): al registrarse, el servidor
+  genera un código de 6 dígitos (privado, en `registros_jugadores`) y el
+  jugador lo envía al WhatsApp de la sala con un link `wa.me` prellenado
+  (desde SU número). El anfitrión lo confirma desde
+  `/admin/sala/:id/verificaciones` (vista privada en su celular, la única que
+  ve nombre/celular/código) y el estado viaja a la TV solo como contador y
+  ✅. Una persona ya verificada **hereda** la verificación al re-registrarse.
+  No hay APIs ni costos: es el WhatsApp común del anfitrión (el número se
+  configura por sala y cae a `VITE_WHATSAPP_ANFITRION` si falta).
 * **Alta de operadores**: no hay registro público. El dueño invita desde el
   panel (`Authentication → Users → Add user → Invite`); el trigger
   `trg_admin_automatico` registra al invitado como `operador` y la app
@@ -141,8 +154,11 @@ arquitectura, seguridad, herramientas y despliegue.
   `pausar_partida`, `reanudar_partida`, `terminar_partida`, `volver_al_lobby`,
   `expulsar_jugador`, `cargar_banco`, gestión de admins.
 * **Jugador**: `unirse_sala` (nickname único por sala, devuelve token +
-  `pinJugador`), `entrar_con_identificador` (login por correo/celular/PIN),
-  `salir_sala`, `perfil_por_correo`.
+  `pinJugador` + código de verificación), `entrar_con_identificador` (login por
+  correo/celular/PIN), `salir_sala`, `perfil_por_correo`, `estado_verificacion`
+  (código pendiente + WhatsApp de la sala).
+* **Verificación (host)**: `verificaciones_pendientes` (pendientes con PII,
+  solo el dueño), `confirmar_verificacion`, `actualizar_contacto_whatsapp`.
 * **Rosco (v3, individual)**: `rosco_iniciar`, `rosco_enviar`, `rosco_pasar`,
   `rosco_cerrar`, `rosco_estado`. Internas: `rosco_letra_siguiente`
   (orden circular A–Ñ, salta a las pendientes), `rosco_avanzar_interno`,
@@ -242,6 +258,8 @@ src/
 │       ├── AdminPanel.jsx        # Dashboard: crear/listar/borrar salas
 │       ├── AdminSala.jsx         # Centro de control: lobby (QR+PIN) →
 │       │                         #   jugando → pausado → podio/revancha
+│       ├── VerificacionesSala.jsx # Vista PRIVADA (celular del anfitrión):
+│       │                         #   pendientes de verificación con PII
 │       ├── BancoPreguntas.jsx    # Editor de bancos (rosco/trivia/supervivencia)
 │       └── paneles/              # PanelRosco, PanelTrivia, PanelBasta,
 │                                 #   PanelSupervivencia (proyección + moderación)
@@ -282,10 +300,10 @@ src/
 
 | Juego | Mecánica | Puntaje |
 | --- | --- | --- |
-| **El Rosco** ⭕ (v3: individual) | Abecedario circular A–Ñ. Reloj **total continuo** (240/360/600 s · **5 min por defecto**). Cada letra es un pasapalabra: responder, pasar o cerrar; al terminar la pasada se vuelve a ciclar **solo por las pendientes**. Validación server-side (normalización + Levenshtein). | **+100** acierto, **−50** error, pasapalabra 0 |
-| **Trivia de Velocidad** ⚡ | Base de **1000 pts** que se derrite ms a ms durante **20 s** contra el deadline del servidor. | Rachas: 3+ → **x2**, 5+ → **x3** |
+| **El Rosco** ⭕ (v3: individual) | Abecedario circular A–Ñ. Reloj **total continuo** (240/360/600 s · **5 min por defecto**). Cada letra es un pasapalabra: responder, pasar o cerrar; al terminar la pasada se vuelve a ciclar **solo por las pendientes** y la pregunta de cada letra es **siempre la misma** (el server la fija la primera vez). Validación server-side (normalización + Levenshtein). | **+100** acierto, **−50** error, pasapalabra 0 |
+| **Trivia de Velocidad** ⚡ | Base de **1000 pts** que se derrite ms a ms durante **10 s** contra el deadline del servidor. La opción correcta se revela recién al agotarse el tiempo (proyección y celulares): nunca antes, porque la pantalla se proyecta. | Rachas: 3+ → **x2**, 5+ → **x3** |
 | **Basta!** 🎯 | Letra común + 5 categorías. El primero en completar dispara la cuenta regresiva **letal de 10 s**. Al cerrar, el diccionario (600k palabras) y los léxicos marcan palabras dudosas como **avisos** (naranja/ámbar), pero el puntaje lo decide el anfitrión: única **+10**, repetida **+5**, tachada 0. Si re-valida a mano una palabra inexistente, el diccionario la aprende. | 10 / 5 / 0 |
-| **Supervivencia** 💀 | Verdadero/Falso a eliminación súbita: un error (o no responder) te elimina y pasás a espectador (pantalla roja). | **+25** por acierto |
+| **Supervivencia** 💀 | Verdadero/Falso a eliminación súbita: un error (o no responder) te elimina y pasás a espectador (pantalla roja). La verdad se revela al vencer la ventana (la proyección no la muestra antes). | **+25** por acierto |
 
 Las constantes de reglas viven en `src/game/constantes.js` como **espejo
 exacto** de las RPCs del servidor (solo para pintar la UI; el server manda).
@@ -336,8 +354,22 @@ supabase/migrations/
 │                                       #   PII mínima, topes, columnas
 ├── 20260124000000_seguridad_v2_hotfix.sql # El intento fallido debe commitear
 │                                          #   (error suave)
-└── 20260125000000_unirse_sin_fantasmas.sql # Re-registro en la misma sala
-                                        #   reutiliza la fila del jugador
+├── 20260125000000_unirse_sin_fantasmas.sql # Re-registro en la misma sala
+│                                        #   reutiliza la fila del jugador
+├── 20260126000000_limpieza_rosco_v2.sql # Limpieza: RPC muerta del rosco v2
+├── 20260127000000_limites_ajustables.sql # Umbrales anti fuerza bruta en
+│                                        #   tabla `limites_acceso` (UPDATE
+│                                        #   sin recrear funciones)
+├── 20260128000000_rosco_doble_tiempo.sql # Rosco: 300 s por defecto
+├── 20260129000000_rosco_pregunta_fija.sql # Rosco: la pregunta de una letra
+│                                        #   NO cambia al volver del
+│                                        #   pasapalabra (mapa `p`)
+├── 20260130000000_trivia_10s.sql       # Trivia: 10 s por defecto (antes 20)
+├── 20260131000000_verificacion_whatsapp.sql # Verificación de WhatsApp por
+│                                         #   sala (código + confirmación del
+│                                         #   anfitrión, heredable)
+└── 20260201000000_verificacion_whatsapp_hotfix.sql # entrar_con_identificador
+                                          #   conserva el rate limit de la 24
 ```
 
 Se aplican con **Supabase CLI**: `npx supabase link --project-ref <REF>` y
@@ -359,6 +391,11 @@ Realtime y los permisos).
   (60 y 25 por 5 min), así una sala con IP compartida no se bloquea.
 * **PII mínima** (v2): `perfil_por_correo` solo devuelve `existe` + nombre +
   nickname; `anon` no ve `salas.id_anfitrion`; entradas de juego con topes.
+* **PII de verificación** (v5): nombre/celular/código solo salen por
+  `verificaciones_pendientes`, que exige ser el dueño de la sala; la pantalla
+  proyectada únicamente ve `jugadores.verificado` (booleano). El
+  `contacto_whatsapp` de la sala no se expone por columna a `anon` (se
+  entrega por RPC al jugador autenticado con su token).
 * **Frontend**: CSP, HSTS, X-Frame-Options, COOP y Permissions-Policy en
   `vercel.json`.
 
@@ -368,6 +405,8 @@ Realtime y los permisos).
 npm install
 cp .env.example .env        # completar VITE_SUPABASE_URL,
                             #   VITE_SUPABASE_ANON_KEY, VITE_APP_URL
+                            #   (opcional: VITE_WHATSAPP_ANFITRION para la
+                            #    verificación de jugadores)
 npm run dev                 # http://localhost:5173
 
 # Base de datos (una sola vez):
@@ -427,7 +466,8 @@ espejo sin tocar producción. Ver `docs/operacion.md`.
 2. `vercel.json` reescribe cualquier ruta a `index.html` (SPA fallback para
    React Router).
 3. Variables en Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
-   `VITE_APP_URL` (esta última arma el QR de la sala).
+   `VITE_APP_URL` (esta última arma el QR de la sala) y, opcional,
+   `VITE_WHATSAPP_ANFITRION` (WhatsApp global de verificación).
 4. Aplicar migraciones en Supabase (`supabase db push`); Realtime queda
    configurado por ellas.
 5. Dominio: **kaldora.site**.

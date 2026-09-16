@@ -2,7 +2,7 @@
 //
 // Proyección + control de la TRIVIA DE VELOCIDAD: la pregunta con sus
 // opciones y la correcta resaltada (solo el host ve el índice), el reloj
-// de 20 s que se derrite, contador en vivo de respuestas y el botón para
+// de 10 s que se derrite, contador en vivo de respuestas y el botón para
 // lanzar la siguiente pregunta.
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -28,12 +28,17 @@ export default function PanelTrivia({
   const [pregunta, setPregunta] = useState(null);
   const [respondieron, setRespondieron] = useState(0);
   const [acertaron, setAcertaron] = useState(0);
+  // La correcta NO se resalta mientras corre el reloj: esta pantalla se
+  // proyecta y los jugadores responderían mirándola. Se revela al agotarse
+  // el tiempo (junto con el aviso `trivia_reveal` a los celulares).
+  const [revelado, setRevelado] = useState(false);
   const reveladoRef = useRef(null);
 
-  // Pregunta activa, con la correcta resaltada (columna solo del host).
+  // Pregunta activa (la columna con la correcta es solo del host).
   useEffect(() => {
     setRespondieron(0);
     setAcertaron(0);
+    setRevelado(false);
     reveladoRef.current = null;
     if (!juego.pregunta_id) {
       setPregunta(null);
@@ -67,10 +72,12 @@ export default function PanelTrivia({
     });
   });
 
-  // Al agotarse el tiempo, revela la correcta en los celulares (broadcast).
+  // Al agotarse el tiempo, revela la correcta en la proyección y en los
+  // celulares (broadcast).
   useEffect(() => {
     if (congelada || !pregunta) return;
     if (msRestantes > 0) return;
+    setRevelado(true);
     if (reveladoRef.current === juego.pregunta_id) return;
     reveladoRef.current = juego.pregunta_id;
     enviar('trivia_reveal', { indice: pregunta.indice_correcto });
@@ -118,7 +125,7 @@ export default function PanelTrivia({
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {(pregunta?.opciones || []).map((opcion, i) => {
-              const correcta = pregunta && i === pregunta.indice_correcto;
+              const correcta = revelado && pregunta && i === pregunta.indice_correcto;
               return (
                 <div
                   key={i}

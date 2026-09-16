@@ -25,6 +25,10 @@ export default function PanelSupervivencia({
 
   const [pregunta, setPregunta] = useState(null);
   const [respondieron, setRespondieron] = useState(0);
+  // La verdad NO se muestra mientras corre la ventana: esta pantalla se
+  // proyecta y los jugadores responderían mirándola. Se revela al vencer el
+  // tiempo (cuando se procesan las eliminaciones).
+  const [revelado, setRevelado] = useState(false);
   // Evita re-procesar la misma pregunta con cada cambio de offsetReloj.
   const procesadoRef = useRef(null);
 
@@ -32,9 +36,11 @@ export default function PanelSupervivencia({
   const eliminados = jugadores.filter((j) => j.eliminado);
   const nicknamePorId = Object.fromEntries(jugadores.map((j) => [j.id, j.nickname]));
 
-  // Pregunta activa, con su verdad (columna solo del host).
+  // Pregunta activa (la columna con la verdad es solo del host, pero se
+  // revela recién cuando cierra la ventana).
   useEffect(() => {
     setRespondieron(0);
+    setRevelado(false);
     if (!idPregunta) {
       setPregunta(null);
       return;
@@ -67,6 +73,7 @@ export default function PanelSupervivencia({
   useEffect(() => {
     if (congelada || !idPregunta || !juego.inicio) return undefined;
     const disparar = () => {
+      setRevelado(true);
       if (procesadoRef.current === idPregunta) return;
       procesadoRef.current = idPregunta;
       ejecutar(() => api.supervivenciaProcesar(sala.id, idPregunta));
@@ -121,7 +128,7 @@ export default function PanelSupervivencia({
           ) : (
             <SkeletonLineas lineas={2} className="mx-auto max-w-md py-1" />
           )}
-          {pregunta && (
+          {revelado && pregunta && (
             <p
               className={`mt-3 inline-block rounded-full px-4 py-1 text-sm font-black ${
                 pregunta.es_verdadera

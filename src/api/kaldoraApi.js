@@ -40,6 +40,9 @@ function guardarSesionDesdeRpc(data, extras = {}) {
     ...sesion,
     pinJugador: data.pinJugador ?? null,
     recurrente: Boolean(data.recurrente),
+    verificado: Boolean(data.verificado),
+    codigoVerificacion: data.codigoVerificacion ?? null,
+    whatsapp: data.whatsapp ?? null,
   };
 }
 
@@ -178,6 +181,18 @@ export const api = {
     return guardarSesionDesdeRpc(data, { icono, color });
   },
   salirSala: (token = tokenJugador()) => rpc('salir_sala', { p_token: token }),
+
+  // ---- Verificación de WhatsApp del registro ----
+  // Estado propio (código a enviar + WhatsApp de la sala, si está pendiente).
+  estadoVerificacion: () => rpc('estado_verificacion', { p_token: tokenJugador() }),
+  // Anfitrión (vista privada): pendientes con PII, confirmar y configurar el
+  // WhatsApp que recibe los códigos de ESA sala.
+  verificacionesPendientes: (idSala) =>
+    rpc('verificaciones_pendientes', { p_sala: idSala }),
+  confirmarVerificacion: (idSala, idJugador) =>
+    rpc('confirmar_verificacion', { p_sala: idSala, p_jugador: idJugador }),
+  actualizarContactoWhatsapp: (idSala, whatsapp) =>
+    rpc('actualizar_contacto_whatsapp', { p_sala: idSala, p_whatsapp: whatsapp }),
 
   // ---- Reloj ----
   // Hora del servidor para calibrar los cuenta-atrás sin tráfico de Realtime.

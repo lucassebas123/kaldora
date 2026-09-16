@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, LogIn, ShieldCheck, Lock } from 'lucide-react';
 import FondoAnimado from '../../components/FondoAnimado';
 import BotonMusica from '../../components/BotonMusica';
@@ -7,6 +7,10 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Si venía redirigido de una ruta protegida (p. ej. la vista privada de
+  // verificaciones abierta en el celular), vuelve ahí después del login.
+  const destino = location.state?.from?.pathname || '/admin';
   const { estado, entrar } = useAdminAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,8 +18,8 @@ export default function AdminLogin() {
   const [trabajando, setTrabajando] = useState(false);
 
   useEffect(() => {
-    if (estado === 'dentro') navigate('/admin', { replace: true });
-  }, [estado, navigate]);
+    if (estado === 'dentro') navigate(destino, { replace: true });
+  }, [estado, navigate, destino]);
 
   async function enviar(e) {
     e.preventDefault();
@@ -27,7 +31,7 @@ export default function AdminLogin() {
     setTrabajando(true);
     try {
       await entrar(email, password);
-      navigate('/admin', { replace: true });
+      navigate(destino, { replace: true });
     } catch (err) {
       const msg = String(err.message || '');
       if (msg.includes('Invalid login')) {

@@ -13,6 +13,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Loader2, Users, Play, Pause, LogOut, WifiOff, Square, Undo2, Copy, Check, BookOpen, Keyboard,
+  ShieldCheck,
 } from 'lucide-react';
 import FondoAnimado from '../../components/FondoAnimado';
 import BotonMusica from '../../components/BotonMusica';
@@ -34,12 +35,14 @@ const URL_BASE = import.meta.env.VITE_APP_URL || window.location.origin;
 export default function AdminSala() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const urlVerificaciones = `${URL_BASE}/admin/sala/${id}/verificaciones`;
 
   const { sala, jugadores, online, listo, error, degradado, offsetReloj, escuchar, enviar, publicarEstado, recargar } =
     useSalaRealtime(id, { esAnfitrion: true });
 
   const [trabajando, setTrabajando] = useState(false);
   const [mostrarBanco, setMostrarBanco] = useState(false);
+  const [mostrarVerif, setMostrarVerif] = useState(false);
   const [aviso, setAviso] = useState(null);
 
   const ejecutar = useCallback(async (fn) => {
@@ -183,6 +186,13 @@ export default function AdminSala() {
               tono="bg-sky-500/20 hover:bg-sky-500/30 text-sky-200"
               titulo="Editar y cargar preguntas de los 4 juegos"
             />
+            <BotonControl
+              onClick={() => setMostrarVerif(true)}
+              icono={<ShieldCheck size={14} />}
+              texto="Verificaciones"
+              tono="bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200"
+              titulo="Confirmar la verificación de WhatsApp desde tu celular (vista privada)"
+            />
             {(sala.estado === 'jugando' || sala.estado === 'pausado') && (
               <BotonControl
                 onClick={() =>
@@ -275,6 +285,47 @@ export default function AdminSala() {
       </main>
 
       {mostrarBanco && <BancoPreguntas onCerrar={() => setMostrarBanco(false)} />}
+
+      {/* Verificaciones: la vista privada se usa en el celular del anfitrión.
+          Acá (pantalla proyectada) solo se muestra el QR, nunca la PII. */}
+      {mostrarVerif && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Verificación de WhatsApp"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          onClick={() => setMostrarVerif(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#0D0720] p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="flex items-center justify-center gap-2 text-sm font-black">
+              <ShieldCheck size={17} className="text-emerald-300" />
+              Verificación de WhatsApp
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-[#B8AFD9]">
+              Escaneá con tu celular para abrir la vista privada (tiene los datos personales: no la
+              proyectes). Ahí cargás el WhatsApp de esta sala y confirmás a cada jugador.
+            </p>
+            <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3">
+              <QRCodeSVG value={urlVerificaciones} size={190} level="M" />
+            </div>
+            <button
+              onClick={() => navigate(`/admin/sala/${id}/verificaciones`)}
+              className="mt-4 h-11 w-full rounded-xl border border-white/15 bg-white/5 text-[11px] font-bold text-[#B8AFD9] transition hover:bg-white/15"
+            >
+              Abrir en este dispositivo (se verán datos personales)
+            </button>
+            <button
+              onClick={() => setMostrarVerif(false)}
+              className="mt-3 text-[11px] text-[#6C6193] transition hover:text-[#B8AFD9]"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -287,6 +338,7 @@ function LobbyAnfitrion({ sala, jugadores, online, ejecutar, trabajando }) {
   const [juegoElegido, setJuegoElegido] = useState(sala.juego_actual || null);
   const urlUnirse = `${URL_BASE}/?sala=${sala.codigo}`;
   const [copiado, setCopiado] = useState(false);
+  const verificados = jugadores.filter((j) => j.verificado).length;
 
   // Si cambia el juego de la sala, se refleja en el selector (en render).
   const [juegoPrevio, setJuegoPrevio] = useState(sala.juego_actual || null);
@@ -358,9 +410,27 @@ function LobbyAnfitrion({ sala, jugadores, online, ejecutar, trabajando }) {
       {/* Jugadores + selector de juego */}
       <section className="flex flex-col gap-6 min-w-0">
         <div>
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[#8B80B3] mb-3">
-            Jugadores conectados ({jugadores.length})
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[#8B80B3]">
+              Jugadores conectados ({jugadores.length})
+            </h2>
+            {/* Contador público: la PII se confirma desde el celular, acá no se muestra. */}
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                verificados === jugadores.length && jugadores.length > 0
+                  ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+                  : 'border-white/15 bg-white/5 text-[#B8AFD9]'
+              }`}
+            >
+              Verificados {verificados}/{jugadores.length}
+            </span>
+          </div>
+          <p className="mb-3 text-[11px] leading-relaxed text-[#6C6193]">
+            La verificación de WhatsApp se confirma desde tu celular: tocá{' '}
+            <span className="text-[#B8AFD9]">Verificaciones</span> arriba y escaneá el QR (o entrá a{' '}
+            <span className="text-[#B8AFD9]">{URL_BASE.replace(/^https?:\/\//, '')}/admin</span> desde el
+            teléfono). Acá solo se ve el tilde.
+          </p>
           {jugadores.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm text-[#6C6193]">
               Esperando que escaneen el QR e ingresen el PIN...
@@ -379,6 +449,13 @@ function LobbyAnfitrion({ sala, jugadores, online, ejecutar, trabajando }) {
                     online={online.has(j.id)}
                   />
                   <span className="text-sm font-semibold truncate">{j.nickname}</span>
+                  {j.verificado && (
+                    <Check
+                      size={13}
+                      className="ml-auto shrink-0 text-emerald-400"
+                      aria-label="WhatsApp verificado"
+                    />
+                  )}
                 </div>
               ))}
             </div>

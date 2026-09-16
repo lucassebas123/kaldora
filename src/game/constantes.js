@@ -16,7 +16,7 @@ export const JUEGOS = {
     id: 'trivia',
     nombre: 'Trivia de Velocidad',
     emoji: '⚡',
-    descripcion: '1000 pts que se derriten en 20 s. Rachas x2 y x3.',
+    descripcion: '1000 pts que se derriten en 10 s. Rachas x2 y x3.',
     color: 'from-sky-400 to-cyan-500',
     acento: 'text-sky-300',
     matiz: 197,
@@ -54,7 +54,7 @@ export const ROSCO = {
 };
 
 export const TRIVIA = {
-  DURACION_MS: 20000,
+  DURACION_MS: 10000,
   PUNTOS_BASE: 1000,
 };
 
