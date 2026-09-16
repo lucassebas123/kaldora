@@ -73,9 +73,15 @@ Un cron externo gratuito golpea el backend directamente, así que sobrevive a
 la desactivación por 60 días:
 
 * URL: `VITE_SUPABASE_URL/rest/v1/salas?select=id&limit=1` (GET).
-* Headers: `apikey: <VITE_SUPABASE_ANON_KEY>` y
-  `Authorization: Bearer <VITE_SUPABASE_ANON_KEY>`.
-* Frecuencia: 1 vez por día como mínimo (mejor cada 6-12 h).
+* Autenticación (cualquiera de las dos; ambas verificadas con HTTP 200):
+  - Headers: `apikey: <VITE_SUPABASE_ANON_KEY>` y
+    `Authorization: Bearer <VITE_SUPABASE_ANON_KEY>`, o
+  - la key en la URL:
+    `.../rest/v1/salas?select=id&limit=1&apikey=<VITE_SUPABASE_ANON_KEY>`
+    (útil en monitores free que no permiten headers; la publishable key es
+    pública, no hay riesgo en la URL).
+* Frecuencia: 1 vez por día como mínimo (mejor cada 6-12 h; en UptimeRobot
+  free sirve el chequeo por defecto de 5 min).
 * **UptimeRobot** (free): alertas por email cuando el ping falla.
   **cron-job.org** (free): cron con "notify on failure". Cualquiera sirve.
 * Importante: apuntar al **backend Supabase**, no a kaldora.site (el frontend
