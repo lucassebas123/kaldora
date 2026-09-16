@@ -42,14 +42,47 @@ node scripts/restore.mjs --dir backups/<fecha>   # restaura bancos, léxicos y r
 
 ## 2. Anti-pausa del plan Free
 
-Supabase pausa los proyectos Free tras ~7 días sin actividad. En pleno evento
-eso es downtime garantizado. `scripts/keepalive.mjs` hace 2 lecturas REST
-mínimas; el workflow `.github/workflows/keepalive.yml` lo corre todos los días
-a las 12:10 UTC.
+Supabase pausa los proyectos Free tras ~7 días de baja actividad (su propia
+guía dice que "a few user requests to the database each day" alcanza; un solo
+request diario es fino, no garantizado). En pleno evento eso es downtime
+garantizado. El keep-alive tiene **dos capas independientes**:
+
+### Capa 1 — GitHub Actions (3 toques por día)
+
+`scripts/keepalive.mjs` hace 2 lecturas REST anon (`salas` y
+`categorias_basta`); el workflow `.github/workflows/keepalive.yml` lo corre
+**3 veces por día** (02:10, 10:10 y 18:10 UTC) y también a mano con
+`workflow_dispatch`.
 
 * Requiere dos secrets del repo: `VITE_SUPABASE_URL` y
-  `VITE_SUPABASE_ANON_KEY` (Settings → Secrets and variables → Actions).
-* También se puede ejecutar a mano: `npm run keepalive`.
+  `VITE_SUPABASE_ANON_KEY` (Settings → Secrets and variables → Actions) con
+  los mismos valores del `.env` de producción. Si faltan, el workflow falla
+  con un error explícito antes de tocar la base.
+* Ejecución local: `npm run keepalive`.
+* **Limitación documentada**: GitHub desactiva los workflows programados tras
+  **60 días sin actividad en el repo** (commits). Si eso pasa, esta capa muere
+  en silencio; por eso existe la capa 2.
+* Emails: por defecto GitHub no notifica nada. Activar en
+  `github.com/settings/notifications` → System → Actions → **Email** (y
+  "Only notify for failed workflows"). Las notificaciones de un workflow
+  programado llegan al usuario que modificó el cron por última vez.
+
+### Capa 2 — monitor externo (independiente de GitHub)
+
+Un cron externo gratuito golpea el backend directamente, así que sobrevive a
+la desactivación por 60 días:
+
+* URL: `VITE_SUPABASE_URL/rest/v1/salas?select=id&limit=1` (GET).
+* Headers: `apikey: <VITE_SUPABASE_ANON_KEY>` y
+  `Authorization: Bearer <VITE_SUPABASE_ANON_KEY>`.
+* Frecuencia: 1 vez por día como mínimo (mejor cada 6-12 h).
+* **UptimeRobot** (free): alertas por email cuando el ping falla.
+  **cron-job.org** (free): cron con "notify on failure". Cualquiera sirve.
+* Importante: apuntar al **backend Supabase**, no a kaldora.site (el frontend
+  en Vercel nunca se duerme).
+
+**Si el proyecto ya está pausado, ningún ping lo despierta**: hay que entrar
+al dashboard → *Resume project* (ver §6).
 
 ---
 
@@ -138,7 +171,8 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 ## 6. Runbook del día del evento
 
 ### Antes (el día previo)
-- [ ] `npm run keepalive` (proyecto despierto).
+- [ ] Keep-alive en verde: últimos runs del workflow `keepalive` (§2) y monitor
+      externo activo. Probar a mano: `npm run keepalive`.
 - [ ] `npm run backup` (snapshot por si hay que restaurar).
 - [ ] `ENTORNO=staging npm run verificar` en verde.
 - [ ] En cada sala: cargar el **WhatsApp de verificación** (vista privada

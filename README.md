@@ -450,8 +450,9 @@ node scripts/test-caos.mjs      # Caos: Realtime caído en medio de la partida,
 node scripts/backup.mjs         # Respaldo de datos irremplazables (JSON +
                                 #   manifest sha256); no necesita Docker
 node scripts/restore.mjs --dir backups/<fecha>  # Restauración verificada
-node scripts/keepalive.mjs      # Anti-pausa del plan Free (cron diario en
-                                #   .github/workflows/keepalive.yml)
+node scripts/keepalive.mjs      # Anti-pausa del plan Free (3×/día en
+                                #   .github/workflows/keepalive.yml + monitor
+                                #   externo; ver docs/operacion.md §2)
 node scripts/auditar-api.mjs    # Auditoría estática frontend ↔ SQL: cada RPC
                                 #   existe, parámetros y grants; con LIVE=1
                                 #   contrasta contra la base real (drift)

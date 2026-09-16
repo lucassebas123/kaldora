@@ -9,7 +9,7 @@
 // Hace dos lecturas REST livianas con la anon key (sin datos sensibles).
 //
 // Uso local:      node scripts/keepalive.mjs
-// En GitHub Actions (cron diario): secrets VITE_SUPABASE_URL y
+// En GitHub Actions (3 veces al día): secrets VITE_SUPABASE_URL y
 // VITE_SUPABASE_ANON_KEY.
 
 import { readFileSync } from 'node:fs';
@@ -46,7 +46,10 @@ const consultas = [
 let ok = true;
 for (const consulta of consultas) {
   try {
-    const res = await fetch(consulta, { headers: cabeceras });
+    const res = await fetch(consulta, {
+      headers: cabeceras,
+      signal: AbortSignal.timeout(15000),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     console.log(`  ✓ ${res.status} ${consulta.replace(URL, '')}`);
   } catch (e) {
