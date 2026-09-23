@@ -51,8 +51,8 @@ garantizado. El keep-alive tiene **dos capas independientes**:
 
 `scripts/keepalive.mjs` hace 2 lecturas REST anon (`salas` y
 `categorias_basta`); el workflow `.github/workflows/keepalive.yml` lo corre
-**3 veces por día** (02:10, 10:10 y 18:10 UTC) y también a mano con
-`workflow_dispatch`.
+**6 veces por día** (cada 4 h: 02:10, 06:10, 10:10, 14:10, 18:10 y 22:10 UTC
+→ **12 requests/día**) y también a mano con `workflow_dispatch`.
 
 * Requiere dos secrets del repo: `VITE_SUPABASE_URL` y
   `VITE_SUPABASE_ANON_KEY` (Settings → Secrets and variables → Actions) con
@@ -70,25 +70,30 @@ garantizado. El keep-alive tiene **dos capas independientes**:
 ### Capa 2 — monitor externo (independiente de GitHub)
 
 Un cron externo gratuito golpea el backend directamente, así que sobrevive a
-la desactivación por 60 días:
+la desactivación por 60 días. Configuración recomendada con **cron-job.org**
+(free, cada 15 min → ~96 requests/día):
 
-* URL: `VITE_SUPABASE_URL/rest/v1/salas?select=id&limit=1` (GET).
-* Autenticación (cualquiera de las dos; ambas verificadas con HTTP 200):
-  - Headers: `apikey: <VITE_SUPABASE_ANON_KEY>` y
-    `Authorization: Bearer <VITE_SUPABASE_ANON_KEY>`, o
-  - la key en la URL:
-    `.../rest/v1/salas?select=id&limit=1&apikey=<VITE_SUPABASE_ANON_KEY>`
-    (útil en monitores free que no permiten headers; la publishable key es
-    pública, no hay riesgo en la URL).
-* Frecuencia: 1 vez por día como mínimo (mejor cada 6-12 h; en UptimeRobot
-  free sirve el chequeo por defecto de 5 min).
-* **UptimeRobot** (free): alertas por email cuando el ping falla.
-  **cron-job.org** (free): cron con "notify on failure". Cualquiera sirve.
+1. Crear cuenta gratis en [cron-job.org](https://cron-job.org).
+2. *Create cronjob* → Title: `kaldora-keepalive`.
+3. URL (con la key en query, sin headers; la publishable key es pública):
+
+   ```
+   https://<VITE_SUPABASE_URL>/rest/v1/salas?select=id&limit=1&apikey=<VITE_SUPABASE_ANON_KEY>
+   ```
+
+   (Los dos valores están en `.env` local o en Vercel → Environment Variables.
+   También funciona con headers `apikey` + `Authorization: Bearer <key>`.)
+4. Schedule: **Every 15 minutes** (o cada 30 min; el mínimo del plan Free de
+   Supabase se cumple igual con 1 vez por día).
+5. Activar notificación por email en fallos (*Notify on failure*).
+
+Alternativas equivalentes: **UptimeRobot** (free, chequeo cada 5 min → ~288/día
+y alerta si el backend se cae) o cualquier cron que permita GET a una URL.
+
 * Importante: apuntar al **backend Supabase**, no a kaldora.site (el frontend
   en Vercel nunca se duerme).
-
-**Si el proyecto ya está pausado, ningún ping lo despierta**: hay que entrar
-al dashboard → *Resume project* (ver §6).
+* Si el proyecto Free ya figura pausado, ningún ping lo despierta: Dashboard →
+  *Resume project* (ver §6).
 
 ---
 
@@ -126,6 +131,36 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 > **Pro** (500 msg/s, sin pausa, backups diarios) elimina el riesgo de una vez.
 > Aun sin Pro, si Realtime corta un canal, la app **no pierde puntajes**: el
 > polling y los deadlines del servidor re-sincronizan solos.
+
+### Escenario del evento (3 salas × 15 · 3 h · 1 día)
+
+Dimensionamiento para el evento previsto (rotación de jugadores, no 2000
+conectados a la vez). Regla de la app: cada acción de un jugador se entrega a
+todos los de su sala → `2 × (jugadores + host)` mensajes por respuesta
+(postgres_changes + broadcast de la burbuja). Medido en staging el 2026-09-23
+con `ENTORNO=staging FILTRO_SALA=1 node scripts/test-carga-3-salas.mjs 15`
+(la app SIEMPRE usa filtro por sala; el test por defecto no lo aplica y en esa
+corrida recibió 3.535 eventos ajenos contra 0 con el filtro):
+
+| Métrica | Valor | Límite Free |
+| --- | --- | --- |
+| Conexiones simultáneas | 48 (45 jugadores + 3 hosts) | 200 ✅ |
+| Reposo (lobby) | 4-7 msg/s | 100/s ✅ |
+| Ronda a ritmo humano | ~72-96 msg/s (estimado) | 100/s ⚠️ al filo |
+| Ráfaga artificial (45 respuestas simultáneas) | trivia ~265/s · basta ~633/s · rosco ~424/s · pico 1.873/s | 100/s ⚠️ se excede |
+| Total del evento (~15 ciclos por sala, rondas de 5 min + recambio) | ~0,4-0,5 M mensajes | 2 M/mes ✅ |
+| Requests del keepalive durante el evento | 108/día (~0,01 % del tráfico) | — |
+
+* **Free alcanza** en cuota mensual. En msg/s los picos de ráfaga pueden pasar
+  los 100/s y Supabase los *throttlea*: la app degrada sola (polling cada 3 s +
+  deadlines del servidor; **los puntajes nunca se pierden**, solo se ven a
+  saltos los contadores en vivo).
+* Mitigaciones sin tocar código: escalonar el inicio del rosco entre TVs,
+  alternar con Trivia/Supervivencia, y mirar Reports → Realtime durante el
+  evento. Pro solo como colchón ante picos (500 msg/s); para 3×15 el test
+  midió 0 sends caídos y 0 eventos ajenos.
+* **Verificación**: `node scripts/test-carga-3-salas.mjs 15` contra staging
+  (agregar `FILTRO_SALA=1` para la configuración real de la app) — ver §7.
 
 ---
 
@@ -170,6 +205,15 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
   opción de Trivia 0-3.
 * **Headers** (Vercel): CSP, HSTS, X-Frame-Options DENY, COOP same-origin,
   Permissions-Policy.
+* **Riesgos aceptados del Database Linter** (migración 33): los RPCs de
+  jugador son `SECURITY DEFINER` ejecutables por `anon` **por diseño**
+  (autentican por token) y los de host por `authenticated`; el linter los
+  reporta siempre y no se pueden silenciar sin romper la app. Lo que sí se
+  corrigió: los RPCs solo-host ya no son ejecutables por `public`/`anon`
+  (antes heredaban el EXECUTE que PostgreSQL otorga a PUBLIC), `search_path`
+  fijo en los helpers y `unaccent`/`fuzzystrmatch` movidas al schema
+  `extensions`. Acción manual pendiente en el dashboard: Authentication →
+  *Leaked Password Protection* (no se configura por migración).
 * Verificación: `ENTORNO=staging node scripts/test-seguridad.mjs` → **14/14**.
 
 ---
@@ -178,9 +222,15 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 
 ### Antes (el día previo)
 - [ ] Keep-alive en verde: últimos runs del workflow `keepalive` (§2) y monitor
-      externo activo. Probar a mano: `npm run keepalive`.
+      externo de cron-job.org activo (cada 15 min). Probar a mano:
+      `npm run keepalive`.
+- [ ] Confirmar que el proyecto NO está pausado (Dashboard → *Resume project*
+      si lo está; ningún ping lo despierta).
 - [ ] `npm run backup` (snapshot por si hay que restaurar).
 - [ ] `ENTORNO=staging npm run verificar` en verde.
+- [ ] Capacidad del evento revisada (§3): 3 salas × 15 entra en Free; si se
+      esperan más jugadores por sala, correr
+      `node scripts/test-carga-3-salas.mjs 15` y decidir Pro.
 - [ ] En cada sala: cargar el **WhatsApp de verificación** (vista privada
       `/admin/sala/:id/verificaciones` en el celular del anfitrión, o
       `VITE_WHATSAPP_ANFITRION` como respaldo global).
@@ -192,6 +242,8 @@ Límites del plan Free: **100 msg/s** (promedio móvil de 1 minuto),
 - [ ] Dashboard de Supabase → **Reports → Realtime**: mirar conexiones y
       mensajes/s. Si aparece un pico sostenido cerca de 100/s, bajar el ritmo
       de rondas.
+- [ ] Con 3 TVs: escalonar el inicio del rosco (no arrancarlo en las 3 al
+      mismo tiempo) y alternar con Trivia/Basta si Realtime se pone lento.
 - [ ] Verificaciones: los jugadores mandan su código por WhatsApp; confirmar
       desde la vista privada del celular (la TV solo muestra contador y ✅).
 - [ ] Si el banner "Reconectando…" aparece en varios celulares: los puntajes
@@ -228,6 +280,7 @@ ENTORNO=staging npm run test:caos
 ENTORNO=staging npm run test:e2e
 ENTORNO=staging npm run test:concurrencia
 ENTORNO=staging npm run test:carga   # 3 salas × 20 · métricas de Realtime
+ENTORNO=staging node scripts/test-carga-3-salas.mjs 15  # escenario del evento (3×15)
 ```
 
 `npm run verificar` encadena lint + lógica + importador + seguridad + caos +

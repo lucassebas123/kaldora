@@ -1,21 +1,22 @@
 # Keep-alive anti-pausa del plan Free de Supabase.
 # Un proyecto Free se pausa tras ~7 días de baja actividad de base de datos.
-# Este workflow hace lecturas mínimas 3 veces por día (y a mano cuando quieras).
+# Este workflow hace lecturas mínimas 6 veces por día (y a mano cuando quieras).
 #
 # Requiere DOS secrets del repositorio (Settings → Secrets and variables →
 # Actions): VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
 #
 # AVISO: GitHub desactiva los workflows programados tras 60 días SIN actividad
 # en el repositorio (commits). Si eso pasa, esta capa muere en silencio; por
-# eso existe la capa 2 (monitor externo) en docs/operacion.md §2.
+# eso existe la capa 2 (monitor externo, cron-job.org) en docs/operacion.md §2.
 
 name: keepalive
 
 on:
   schedule:
-    # Tres toques por día (UTC): 02:10, 10:10 y 18:10.
+    # Seis toques por día (UTC), cada 4 horas: 02:10, 06:10, 10:10,
+    # 14:10, 18:10 y 22:10 → 2 lecturas cada uno = 12 requests/día.
     # Se evitan los minutos en punto, donde GitHub acumula atrasos de cola.
-    - cron: '10 2,10,18 * * *'
+    - cron: '10 */4 * * *'
   workflow_dispatch:
 
 jobs:

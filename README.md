@@ -368,8 +368,13 @@ supabase/migrations/
 ├── 20260131000000_verificacion_whatsapp.sql # Verificación de WhatsApp por
 │                                         #   sala (código + confirmación del
 │                                         #   anfitrión, heredable)
-└── 20260201000000_verificacion_whatsapp_hotfix.sql # entrar_con_identificador
-                                          #   conserva el rate limit de la 24
+├── 20260201000000_verificacion_whatsapp_hotfix.sql # entrar_con_identificador
+│                                         #   conserva el rate limit de la 24
+└── 20260202000000_endurecimiento_lint.sql # Linter de Supabase: policy drift
+                                          #   fuera, search_path fijo,
+                                          #   unaccent/fuzzystrmatch a
+                                          #   `extensions`, EXECUTE de anon
+                                          #   revocado en RPCs solo-host
 ```
 
 Se aplican con **Supabase CLI**: `npx supabase link --project-ref <REF>` y
@@ -450,9 +455,9 @@ node scripts/test-caos.mjs      # Caos: Realtime caído en medio de la partida,
 node scripts/backup.mjs         # Respaldo de datos irremplazables (JSON +
                                 #   manifest sha256); no necesita Docker
 node scripts/restore.mjs --dir backups/<fecha>  # Restauración verificada
-node scripts/keepalive.mjs      # Anti-pausa del plan Free (3×/día en
-                                #   .github/workflows/keepalive.yml + monitor
-                                #   externo; ver docs/operacion.md §2)
+node scripts/keepalive.mjs      # Anti-pausa del plan Free (6×/día — cada 4 h —
+                                #   en .github/workflows/keepalive.yml + monitor
+                                #   externo cron-job.org; ver docs/operacion.md §2)
 node scripts/auditar-api.mjs    # Auditoría estática frontend ↔ SQL: cada RPC
                                 #   existe, parámetros y grants; con LIVE=1
                                 #   contrasta contra la base real (drift)
