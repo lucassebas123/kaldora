@@ -477,3 +477,74 @@ espejo sin tocar producción. Ver `docs/operacion.md`.
 4. Aplicar migraciones en Supabase (`supabase db push`); Realtime queda
    configurado por ellas.
 5. Dominio: **kaldora.site**.
+
+## 12. Operación (keep-alive, capacidad y runbook)
+
+Resumen operativo. El detalle completo, presupuesto de mensajes y tabla de
+decisiones ante incidentes viven en [docs/operacion.md](docs/operacion.md).
+
+### 12.1 Anti-pausa del plan Free — 2 capas
+
+Supabase pausa los proyectos Free tras ~7 días **sin actividad de base**.
+Las dos capas son independientes y deben estar activas:
+
+1. **GitHub Actions** — `.github/workflows/keepalive.yml` corre
+   `scripts/keepalive.mjs` **6 veces/día** (cron `10 */4 * * *`:
+   02:10/06:10/10:10/14:10/18:10/22:10 UTC). Cada corrida hace 2 lecturas REST
+   anon (`salas` y `categorias_basta`) → **12 requests/día**.
+   - Requiere los secrets del repo `VITE_SUPABASE_URL` y
+     `VITE_SUPABASE_ANON_KEY` (Settings → Secrets and variables → Actions).
+   - Prueba manual: `npm run keepalive` o *Actions → keepalive → Run workflow*
+     (debe terminar en verde con `Keep-alive OK`).
+   - Limitaciones: GitHub **demora/batchea** los crons (se observaron corridas
+     con horas de atraso) y los desactiva tras **60 días sin commits**.
+2. **Monitor externo (cron-job.org)** — job `Kaldora keepalive` **cada 15 min**
+   (~96 requests/día) contra
+   `https://<VITE_SUPABASE_URL>/rest/v1/salas?select=id&limit=1&apikey=<ANON_KEY>`
+   (la publishable key es pública) con *Notify on failure*. Al ser externo a
+   GitHub, es la capa que garantiza puntualidad.
+   - Verificación: **TEST RUN** → HTTP 200 y `History` muestra `Successful`.
+
+> Si el proyecto ya figura pausado, ningún ping lo despierta:
+> Dashboard → *Resume project*.
+
+### 12.2 Capacidad del evento (3 salas × 15 · 3 h · 1 día)
+
+Regla de la app: cada acción se entrega a todos los de su sala →
+`2 × (jugadores + host)` mensajes por respuesta. Medido en staging con
+`ENTORNO=staging FILTRO_SALA=1 node scripts/test-carga-3-salas.mjs 15`:
+
+| Métrica | Valor | Límite Free |
+| --- | --- | --- |
+| Conexiones simultáneas | 48 (45 jugadores + 3 hosts) | 200 ✅ |
+| Reposo (lobby) | 4-7 msg/s | 100/s ✅ |
+| Ráfaga artificial (45 respuestas a la vez) | trivia ~265/s · basta ~633/s · rosco ~424/s · pico 1.873/s | 100/s ⚠️ |
+| Total del evento (~15 ciclos por sala) | ~0,4-0,5 M mensajes | 2 M/mes ✅ |
+
+* Free alcanza en cuota; en los picos de ráfaga la app **degrada sola**
+  (polling cada 3 s + deadlines del servidor): los puntajes nunca se pierden.
+* Mitigaciones sin tocar código: escalonar el rosco entre TVs, alternar con
+  Trivia/Supervivencia y mirar **Reports → Realtime** durante el evento.
+
+### 12.3 Checklist del día del evento
+
+1. Keepalive en verde: run de *Actions* + `History` de cron-job.org, y proyecto
+   no pausado.
+2. `npm run backup` (snapshot de datos irremplazables).
+3. `ENTORNO=staging npm run verificar` en verde.
+4. Cargar el WhatsApp de verificación de cada sala (vista privada
+   `/admin/sala/:id/verificaciones` o `VITE_WHATSAPP_ANFITRION`).
+5. Host con batería/enchufe, pestaña despierta y red estable (5 GHz ideal).
+6. Durante: vigilar Reports → Realtime; confirmar verificaciones desde el
+   celular; ante "Reconectando…" esperar (el polling re-sincroniza).
+
+### 12.4 Plan y límites de la cuenta
+
+* Cuenta **Free**: 200 conexiones Realtime, 100 msg/s (promedio por minuto) y
+  2M mensajes/mes. Pro (500 msg/s) solo como colchón ante eventos más grandes.
+* *Leaked Password Protection* es **Pro-only** (en Free el dashboard rechaza el
+  guardado) → riesgo aceptado, mitigado con altas por invitación y mínimo de
+  contraseña 8 en Auth.
+* PII y respuestas correctas nunca salen del servidor hacia clientes anon
+  (ver §8); `anon` solo ejecuta RPCs de jugador (los de host quedaron
+  revocados en la migración 33).

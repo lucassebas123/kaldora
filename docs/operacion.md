@@ -47,7 +47,7 @@ guía dice que "a few user requests to the database each day" alcanza; un solo
 request diario es fino, no garantizado). En pleno evento eso es downtime
 garantizado. El keep-alive tiene **dos capas independientes**:
 
-### Capa 1 — GitHub Actions (3 toques por día)
+### Capa 1 — GitHub Actions (6 toques por día)
 
 `scripts/keepalive.mjs` hace 2 lecturas REST anon (`salas` y
 `categorias_basta`); el workflow `.github/workflows/keepalive.yml` lo corre
@@ -59,6 +59,10 @@ garantizado. El keep-alive tiene **dos capas independientes**:
   los mismos valores del `.env` de producción. Si faltan, el workflow falla
   con un error explícito antes de tocar la base.
 * Ejecución local: `npm run keepalive`.
+* **GitHub demora/batch los crons programados** (corridas observadas con horas
+  de atraso sobre el horario teórico). Para el criterio de Supabase (pausa
+  tras ~7 días sin actividad) el atraso es irrelevante; la puntualidad la
+  garantiza la capa 2.
 * **Limitación documentada**: GitHub desactiva los workflows programados tras
   **60 días sin actividad en el repo** (commits). Si eso pasa, esta capa muere
   en silencio; por eso existe la capa 2.
@@ -212,8 +216,10 @@ corrida recibió 3.535 eventos ajenos contra 0 con el filtro):
   corrigió: los RPCs solo-host ya no son ejecutables por `public`/`anon`
   (antes heredaban el EXECUTE que PostgreSQL otorga a PUBLIC), `search_path`
   fijo en los helpers y `unaccent`/`fuzzystrmatch` movidas al schema
-  `extensions`. Acción manual pendiente en el dashboard: Authentication →
-  *Leaked Password Protection* (no se configura por migración).
+  `extensions`. *Leaked Password Protection* requiere **plan Pro** (en Free el
+  dashboard la muestra pero rechaza el guardado — verificado 2026-09-23) →
+  **riesgo aceptado**, mitigado con altas cerradas (solo por invitación) y
+  longitud mínima de contraseña 8 en Auth.
 * Verificación: `ENTORNO=staging node scripts/test-seguridad.mjs` → **14/14**.
 
 ---
