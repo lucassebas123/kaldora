@@ -30,10 +30,15 @@
 
 ## 2. T-1 — Día anterior
 
-- [ ] **Bancos cargados y verificados.** Camino automático (idempotente, no
-      duplica): `npm run importar:bancos` (`--dry` para previsualizar;
-      `ENTORNO=staging` para el espejo). Alternativa manual, desde
-      `/admin` → sala → **Banco de preguntas**:
+- [ ] **Bancos cargados y verificados.** Tres caminos, todos idempotentes
+      (no duplican):
+      1. Workflow **importar-bancos** (corre solo todos los días 11:20 UTC;
+         también *Run workflow* a mano).
+      2. Comando `npm run importar:bancos` (`--dry` para previsualizar;
+         `ENTORNO=staging` para el espejo).
+      3. Botón **Cargar bancos del evento** en `/admin` → sala → **Banco de
+         preguntas** (usa la semilla ya publicada por 1 o 2).
+      Semilla (para el import manual):
       - `bancos/trivia.json` (≥200 preguntas; índice base 0)
       - `bancos/supervivencia.json` (≥100 frases V/F)
       - `bancos/rosco.json` (3–5 respuestas por letra, A–Z + Ñ)

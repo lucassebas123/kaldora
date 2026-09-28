@@ -1,0 +1,58 @@
+# Importa los bancos de preguntas del evento (docs/bancos/*.json) a Supabase.
+#
+# Es IDEMPOTENTE: publica la semilla y solo inserta lo que falta, así que
+# correrlo todos los días es inofensivo y deja los bancos listos el día del
+# evento sin intervención. También se puede disparar a mano (workflow_dispatch).
+#
+# Requiere CUATRO secrets del repositorio (Settings → Secrets and variables →
+# Actions): VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY (los mismos del
+# keepalive) + HOST_EMAIL y HOST_PASS de un anfitrión autorizado.
+#
+# El .env se genera efímero en el runner a partir de los secrets; no se sube
+# nada al repositorio.
+
+name: importar-bancos
+
+on:
+  schedule:
+    # Diario 11:20 UTC (08:20 Argentina): los bancos quedan publicados antes
+    # de cualquier evento del día.
+    - cron: '20 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Verificar secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          HOST_EMAIL: ${{ secrets.HOST_EMAIL }}
+          HOST_PASS: ${{ secrets.HOST_PASS }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ] || [ -z "$HOST_EMAIL" ] || [ -z "$HOST_PASS" ]; then
+            echo "::error::Faltan secrets: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / HOST_EMAIL / HOST_PASS (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - name: Preparar .env efímero
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          HOST_EMAIL: ${{ secrets.HOST_EMAIL }}
+          HOST_PASS: ${{ secrets.HOST_PASS }}
+        run: |
+          {
+            printf 'VITE_SUPABASE_URL=%s\n' "$VITE_SUPABASE_URL"
+            printf 'VITE_SUPABASE_ANON_KEY=%s\n' "$VITE_SUPABASE_ANON_KEY"
+            printf 'HOST_EMAIL=%s\n' "$HOST_EMAIL"
+            printf 'HOST_PASS=%s\n' "$HOST_PASS"
+          } > .env
+      - run: npm ci
+      - name: Publicar e importar bancos
+        run: npm run importar:bancos

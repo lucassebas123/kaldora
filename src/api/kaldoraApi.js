@@ -133,6 +133,7 @@ export const api = {
   expulsarJugador: (idSala, idJugador) =>
     rpc('expulsar_jugador', { p_sala: idSala, p_jugador: idJugador }),
   cargarBanco: (banco, items) => rpc('cargar_banco', { p_banco: banco, p_items: items }),
+  importarBancoSemilla: (banco) => rpc('importar_banco_semilla', { p_banco: banco }),
   guardarPreguntaRosco: (letra, pregunta, respuesta, idPregunta) =>
     rpc('guardar_pregunta_rosco', {
       p_letra: letra,

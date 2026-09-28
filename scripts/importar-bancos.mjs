@@ -1,8 +1,9 @@
 // scripts/importar-bancos.mjs
 //
-// Importa los bancos de preguntas de docs/bancos/*.json al proyecto Supabase.
-// Es IDEMPOTENTE: compara contra lo que ya existe (pregunta normalizada) y
-// solo inserta lo que falta, así correrlo dos veces no duplica filas.
+// Publica los bancos de docs/bancos/*.json en `bancos_semilla` y los importa
+// a las tablas reales. Es IDEMPOTENTE: la importación corre en el servidor
+// (`importar_banco_semilla`) y solo inserta lo que falta según la pregunta
+// normalizada, así correrlo dos veces no duplica filas.
 //
 // Uso:
 //   node scripts/importar-bancos.mjs                      # producción (.env)
@@ -12,14 +13,14 @@
 //
 // Requiere credenciales de anfitrión: HOST_EMAIL / HOST_PASS en el .env del
 // entorno (el helper _entorno.mjs tiene los mismos defaults que el resto de
-// los scripts). Las claves nunca se imprimen.
+// los scripts). También requiere la migración `bancos_semilla` aplicada.
+// Las claves nunca se imprimen.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cargarEntorno, cliente, RAIZ } from './_entorno.mjs';
 
 const BANCOS = ['trivia', 'supervivencia', 'rosco'];
-const TAMANO_LOTE = 500; // cargar_banco acepta hasta 5000; 500 va holgado.
 const PAGINA = 1000; // tope de PostgREST por select.
 
 const args = process.argv.slice(2);
@@ -32,6 +33,10 @@ const invalidos = seleccion.filter((b) => !BANCOS.includes(b));
 if (invalidos.length) {
   console.error(`✗ Banco(s) desconocido(s): ${invalidos.join(', ')} (válidos: ${BANCOS.join(', ')})`);
   process.exit(2);
+}
+
+function tablaDe(banco) {
+  return banco === 'rosco' ? 'preguntas' : `preguntas_${banco}`;
 }
 
 /** Clave de comparación: minúsculas, sin tildes, espacios colapsados. */
@@ -82,12 +87,12 @@ async function contarFilas(tabla) {
   return count ?? 0;
 }
 
-async function importarBanco(banco) {
-  const tabla = banco === 'rosco' ? 'preguntas' : `preguntas_${banco}`;
+/** Reporte sin escrituras: cuántos ítems del archivo ya existen. */
+async function previsualizar(banco) {
+  const tabla = tablaDe(banco);
   const items = leerArchivo(banco);
   const existentes = await traerPreguntasExistentes(tabla);
 
-  const nuevos = [];
   let omitidos = 0;
   const vistos = new Set();
   for (const item of items) {
@@ -97,25 +102,37 @@ async function importarBanco(banco) {
       continue;
     }
     vistos.add(clave);
-    nuevos.push(item);
   }
+  const total = await contarFilas(tabla);
+  console.log(`\n── ${banco} ─────────────────────────────────────────────`);
+  console.log(`   en archivo: ${items.length} | ya existentes: ${omitidos} | nuevos: ${items.length - omitidos}`);
+  console.log(`   insertados: 0 (--dry) | total en la base: ${total}`);
+  return { banco, enArchivo: items.length, omitidos, insertados: 0, total };
+}
+
+/** Publica el banco en `bancos_semilla` y lo importa (todo en el servidor). */
+async function importar(banco) {
+  const items = leerArchivo(banco);
+
+  const { data: publicados, error: errPublicar } = await supabase.rpc('publicar_banco_semilla', {
+    p_banco: banco,
+    p_items: items,
+  });
+  if (errPublicar) throw new Error(`publicar_banco_semilla(${banco}) falló: ${errPublicar.message}`);
+
+  const { data: res, error: errImportar } = await supabase.rpc('importar_banco_semilla', {
+    p_banco: banco,
+  });
+  if (errImportar) throw new Error(`importar_banco_semilla(${banco}) falló: ${errImportar.message}`);
+
+  const insertados = res?.insertados ?? 0;
+  const omitidos = res?.omitidos ?? 0;
+  const total = res?.total ?? (await contarFilas(tablaDe(banco)));
 
   console.log(`\n── ${banco} ─────────────────────────────────────────────`);
-  console.log(`   en archivo: ${items.length} | ya existentes: ${items.length - nuevos.length} | nuevos: ${nuevos.length}`);
-
-  let insertados = 0;
-  if (!dry) {
-    for (let i = 0; i < nuevos.length; i += TAMANO_LOTE) {
-      const lote = nuevos.slice(i, i + TAMANO_LOTE);
-      const { data, error } = await supabase.rpc('cargar_banco', { p_banco: banco, p_items: lote });
-      if (error) throw new Error(`cargar_banco(${banco}) falló: ${error.message}`);
-      insertados += data ?? 0;
-    }
-  }
-
-  const total = await contarFilas(tabla);
-  console.log(`   insertados: ${dry ? '0 (--dry)' : insertados} | total en la base: ${total}`);
-  return { banco, enArchivo: items.length, omitidos, nuevos: nuevos.length, insertados: dry ? 0 : insertados, total };
+  console.log(`   en archivo: ${items.length} | publicados: ${publicados} | insertados: ${insertados} | omitidos: ${omitidos}`);
+  console.log(`   total en la base: ${total}`);
+  return { banco, enArchivo: items.length, publicados, insertados, omitidos, total };
 }
 
 const env = cargarEntorno();
@@ -138,7 +155,7 @@ const resumen = [];
 let fallo = null;
 for (const banco of seleccion) {
   try {
-    resumen.push(await importarBanco(banco));
+    resumen.push(dry ? await previsualizar(banco) : await importar(banco));
   } catch (e) {
     fallo = e;
     console.error(`✗ ${banco}: ${e.message}`);
@@ -148,7 +165,9 @@ for (const banco of seleccion) {
 
 console.log('\n══════════════════════════════════════════════════════════════');
 for (const r of resumen) {
-  console.log(`  ${r.banco.padEnd(14)} archivo ${String(r.enArchivo).padStart(4)} | omitidos ${String(r.omitidos).padStart(4)} | insertados ${String(r.insertados).padStart(4)} | total ${String(r.total).padStart(4)}`);
+  console.log(
+    `  ${r.banco.padEnd(14)} archivo ${String(r.enArchivo).padStart(4)} | omitidos ${String(r.omitidos).padStart(4)} | insertados ${String(r.insertados).padStart(4)} | total ${String(r.total).padStart(4)}`
+  );
 }
 console.log(fallo ? `  ✗ Terminó con error: ${fallo.message}` : '  ✔ Importación OK');
 await supabase.auth.signOut();

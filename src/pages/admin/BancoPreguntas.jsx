@@ -9,7 +9,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Loader2, X, Save, Trash2, Upload, FileText, AlertTriangle, CheckCircle2,
+  Loader2, X, Save, Trash2, Upload, FileText, AlertTriangle, CheckCircle2, Sparkles,
 } from 'lucide-react';
 import { api, consultas } from '../../api/kaldoraApi';
 import { importarBanco, consolidarTrivia, leerArchivoPorChunks } from '../../utils/importador';
@@ -48,6 +48,10 @@ export default function BancoPreguntas({ onCerrar }) {
   const [importando, setImportando] = useState(false);
   const [progresoLectura, setProgresoLectura] = useState(null); 
   const [previewCrudo, setPreviewCrudo] = useState(null);
+
+  // Bancos del evento: semilla publicada con `npm run importar:bancos`.
+  const [importandoEvento, setImportandoEvento] = useState(false);
+  const [avisoEvento, setAvisoEvento] = useState(null);
 
   // PREVIEW con debounce (esc. 4/7): re-evalúa todo el texto bajo las reglas
   // del modo activo, pero sin re-parsear en cada tecla (los lotes grandes
@@ -161,6 +165,30 @@ export default function BancoPreguntas({ onCerrar }) {
       .finally(() => setProgresoLectura(null));
   }
 
+  async function importarEvento() {
+    if (importandoEvento) return;
+    setImportandoEvento(true);
+    setAvisoEvento(null);
+    try {
+      let insertadas = 0;
+      let omitidas = 0;
+      for (const b of BANCOS) {
+        const r = await api.importarBancoSemilla(b.id);
+        insertadas += r?.insertados ?? 0;
+        omitidas += r?.omitidos ?? 0;
+      }
+      setAvisoEvento({
+        ok: true,
+        mensaje: `✓ Bancos del evento cargados: ${insertadas} nuevas, ${omitidas} ya estaban.`,
+      });
+      await cargarBanco();
+    } catch (err) {
+      setAvisoEvento({ ok: false, mensaje: err.message });
+    } finally {
+      setImportandoEvento(false);
+    }
+  }
+
   async function cargarImport() {
     const { items, descartes, formato } = importarBanco(texto, banco);
     if (items.length === 0) {
@@ -226,6 +254,33 @@ export default function BancoPreguntas({ onCerrar }) {
               <span className="block text-[10px] text-[#8B80B3] leading-tight mt-0.5">{b.detalle}</span>
             </button>
           ))}
+        </div>
+
+        {/* BANCOS DEL EVENTO (semilla publicada con npm run importar:bancos) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] px-4 py-3 mb-5">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-amber-200 flex items-center gap-2">
+              <Sparkles size={14} /> Bancos del evento
+            </p>
+            <p className="text-[11px] text-[#8B80B3] leading-relaxed">
+              Carga de una vez los 3 bancos publicados con{' '}
+              <code className="text-amber-300">npm run importar:bancos</code> (o el workflow
+              <i> importar-bancos</i>). Es idempotente: no duplica.
+            </p>
+            {avisoEvento && (
+              <p className={`mt-1 text-[11px] font-bold ${avisoEvento.ok ? 'text-green-300' : 'text-red-300'}`}>
+                {avisoEvento.mensaje}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={importarEvento}
+            disabled={importandoEvento}
+            className="flex shrink-0 items-center gap-2 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-[#1B1035] font-black px-5 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition"
+          >
+            {importandoEvento ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+            Cargar bancos del evento
+          </button>
         </div>
 
         {/* IMPORTADOR */}
