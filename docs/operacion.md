@@ -270,6 +270,9 @@ corrida recibió 3.535 eventos ajenos contra 0 con el filtro):
 | Datos corruptos | Detener el evento → `node scripts/restore.mjs --dir backups/<fecha>` (avisar al equipo). |
 | Frontend roto tras un deploy | Vercel → Deployments → Rollback al anterior. |
 
+> Eventos con rotación de salas (2 TVs · 15 · Rosco + desempate): ver
+> [runbook-evento-rotacion.md](runbook-evento-rotacion.md).
+
 ---
 
 ## 7. Verificación (antes de cada deploy)

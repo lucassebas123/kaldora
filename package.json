@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "keepalive": "node scripts/keepalive.mjs",
+    "importar:bancos": "node scripts/importar-bancos.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
     "test:logica": "node scripts/test-logica.mjs",

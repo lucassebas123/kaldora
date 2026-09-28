@@ -548,3 +548,9 @@ Regla de la app: cada acción se entrega a todos los de su sala →
 * PII y respuestas correctas nunca salen del servidor hacia clientes anon
   (ver §8); `anon` solo ejecuta RPCs de jugador (los de host quedaron
   revocados en la migración 33).
+
+### 12.5 Runbook de evento por rotación
+
+[docs/runbook-evento-rotacion.md](docs/runbook-evento-rotacion.md) — 2 TVs ·
+15 jugadores por sala · Rosco + desempate (salas nuevas por grupo, 5 cuentas
+de anfitrión rotando).
