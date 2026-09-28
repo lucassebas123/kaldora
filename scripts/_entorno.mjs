@@ -6,7 +6,9 @@
 //   ENTORNO=staging  -> .env.staging (proyecto espejo, no toca producción)
 //   (sin variable)   -> .env (producción)
 //
-// Las claves nunca se imprimen.
+// Requiere HOST_EMAIL / HOST_PASS en el archivo de entorno para los scripts
+// que actúan como anfitrión (tests E2E/carga/caos, importar:bancos, etc.):
+// no hay credenciales por defecto. Las claves nunca se imprimen.
 
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
@@ -46,6 +48,11 @@ export function cargarEntorno() {
   if (!url || !anon) {
     throw new Error(`Faltan credenciales en ${archivo} (URL/anon key)`);
   }
+  if (!env.HOST_EMAIL || !env.HOST_PASS) {
+    throw new Error(
+      `Faltan HOST_EMAIL / HOST_PASS en ${archivo}: los necesitan los scripts que entran como anfitrión (ver .env.example).`
+    );
+  }
 
   return {
     staging,
@@ -53,8 +60,8 @@ export function cargarEntorno() {
     url,
     anon,
     service: service || null,
-    hostEmail: env.HOST_EMAIL || 'admin31@admin.com',
-    hostPass: env.HOST_PASS || '2AdmIN2026',
+    hostEmail: env.HOST_EMAIL,
+    hostPass: env.HOST_PASS,
   };
 }
 
