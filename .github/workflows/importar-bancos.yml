@@ -53,6 +53,8 @@ jobs:
             printf 'HOST_EMAIL=%s\n' "$HOST_EMAIL"
             printf 'HOST_PASS=%s\n' "$HOST_PASS"
           } > .env
-      - run: npm ci
+      # --ignore-scripts: este job no usa Playwright; evita que npm descargue
+      # los navegadores en cada corrida. Las deps del script son JS puro.
+      - run: npm ci --ignore-scripts
       - name: Publicar e importar bancos
         run: npm run importar:bancos
